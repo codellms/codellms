@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto'
 //let chats = []
 export default class Build extends Command {
     static flags = {
-        config: Flags.string({ char: 'c', description: 'toml config file', required: false, default: './codegpt.toml' }),
+        config: Flags.string({ char: 'c', description: 'toml config file', required: false, default: './codellms.toml' }),
         features: Flags.string({ char: 'f', description: 'features dir', required: false, default: './features/' }),
     }
     chats: Array<any> = []
@@ -37,7 +37,7 @@ export default class Build extends Command {
         this.openai = new OpenAIApi(configuration);
         this.chats.push(this.buildFirstChat(config))
         //if the lock file does not exist
-        if (!test('-f', './codegpt-lock.json')) {
+        if (!test('-f', './codellms-lock.json')) {
             await this.initProject()
         }
         await this.parseFeatures(flags.features)//create code with features
@@ -103,7 +103,7 @@ The format below is incorrect:
         return answerResult
     }
 
-    // if the codegpt.lock does not exist.
+    // if the codellms.lock does not exist.
     async initProject(): Promise<void> {
         // init project
         const chat = { "role": "user", "content": `Please tell me what command to use to initialize this project in the current directory. Reply with the executable command that can automatically confirm execution without any user interaction. Please do not include any further explanation in your response. For example, a valid response could be: "npx express-generator . --no-view && npm install -y".` }
@@ -111,7 +111,7 @@ The format below is incorrect:
         let initCommandAnswer = await this.askgpt(this.chats)
         initCommandAnswer = this.cleanCodeBlock(initCommandAnswer!) as string
         this.execCommand(initCommandAnswer)
-        touch('codegpt.lock')
+        touch('codellms.lock')
         // init folder
         this.chats.push({ "role": "user", "content": `Please tell me which folders need to be created, and return them in an array. Multi-level directories can be represented directly as "a/b/c".` })
         const answer = await this.askgpt(this.chats)
@@ -144,9 +144,9 @@ The format below is incorrect:
     execCommand(command: string | undefined, cb?: { onSuccess?: Function, onError?: Function }): void {
         if (command && command.trim()) {
             const { onSuccess, onError } = cb || {}
-            let maybeDoExit = setTimeout(() => exit(1), 10000)// If the following commands are not automatically terminated
+            //let maybeDoExit = setTimeout(() => exit(1), 10000)// If the following commands are not automatically terminated
             const execResult: ShellString = exec(command.trim())
-            clearTimeout(maybeDoExit)
+            //clearTimeout(maybeDoExit)
             if (execResult.code !== 0) {
                 echo(`Error: exec command fail,command is: ${command}`)
                 if (onError) {
@@ -185,10 +185,10 @@ The format below is incorrect:
         return codeBody
     }
     getLockFile(): { [key: string]: any } {
-        const codegptLockFile = fs.readFileSync('codegpt-lock.json')
+        const codellmsLockFile = fs.readFileSync('codellms-lock.json')
         let lockFeatureJson: { [key: string]: any } = {};
-        if (!!codegptLockFile.toString()?.trim()) {
-            lockFeatureJson = JSON.parse(codegptLockFile.toString())
+        if (!!codellmsLockFile.toString()?.trim()) {
+            lockFeatureJson = JSON.parse(codellmsLockFile.toString())
         }
         return lockFeatureJson
     }
@@ -238,7 +238,7 @@ null
                 integrity: mainFileHash,
                 path: filePath
             }
-            this.createFile('codegpt-lock.json', JSON.stringify(lockFeatureJson))
+            this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
         }
     }
     // parse bdd feature file
@@ -251,10 +251,10 @@ null
         const parser = new Parser(builder, matcher)
 
         const filenames = fs.readdirSync(featuredir)
-        // start read codegpt lock file.
+        // start read codellms lock file.
         let lockFeatureJson: { [key: string]: any } = this.getLockFile();
 
-        // read codegpt lock file end.
+        // read codellms lock file end.
         for (let j = 0; j < filenames.length; j++) {
             const file = filenames[j]
             if (path.extname(file) === '.feature') {
@@ -311,7 +311,7 @@ insert code here
                 }
             }
         }
-        this.createFile('codegpt-lock.json', JSON.stringify(lockFeatureJson))
+        this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
         // build project , tell project index to gpt if has error
     }
     async tryBuildOrStart(): Promise<void> {

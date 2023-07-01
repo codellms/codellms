@@ -1,15 +1,15 @@
 {
-  "name": "codegpt",
+  "name": "codellms",
   "version": "0.1.0",
   "description": "auto create all project code use gpt.",
   "author": "guoxing45@gmail.com",
   "bin": {
-    "codegpt": "./bin/run"
+    "codellms": "./bin/run"
   },
-  "homepage": "https://github.com/cgx9/codegpt",
+  "homepage": "https://github.com/dodellms/codellms",
   "license": "Apache License 2.0",
   "main": "dist/index.js",
-  "repository": "https://github.com/cgx9/codegpt",
+  "repository": "https://github.com/codellms/codellms",
   "files": [
     "/bin",
     "/dist",
@@ -37,14 +37,14 @@
     "eslint-config-oclif-typescript": "^1.0.3",
     "mocha": "^9",
     "oclif": "^3",
-    "shx": "^0.3.3",
+    "shx": "^0.3.4",
     "ts-node": "^10.9.1",
     "tslib": "^2.5.0",
     "typescript": "^4.9.5"
   },
   "oclif": {
-    "bin": "codegpt",
-    "dirname": "codegpt",
+    "bin": "codellms",
+    "dirname": "codellms",
     "commands": "./dist/commands",
     "plugins": [
       "@oclif/plugin-help",
@@ -52,8 +52,11 @@
     ],
     "topicSeparator": " ",
     "topics": {
-      "hello": {
-        "description": "Say hello to the world and others"
+      "init": {
+        "description": "init config file"
+      },
+      "build": {
+        "description": "genarate code project"
       }
     }
   },
@@ -70,9 +73,9 @@
   "engines": {
     "node": ">=12.0.0"
   },
-  "bugs": "https://github.com/https://github.com/cgx9/codegpt/codegpt/issues",
+  "bugs": "https://github.com/https://github.com/codellms/codellms/issues",
   "keywords": [
-    "oclif"
+    "oclif", "codegpt", "codellms", "openai", "code generate"
   ],
   "types": "dist/index.d.ts"
 }

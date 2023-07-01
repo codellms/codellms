@@ -9,7 +9,7 @@ export default class Init extends Command {
     async run(): Promise<void> {
         // create default toml file if not exists.
         //const {flags} = await this.parse(Init)
-        const configFile = './codegpt.toml'
+        const configFile = './codellms.toml'
         const defaultConfigJson = {
             dependencies: {
                 express: '4.18.1'
@@ -26,18 +26,20 @@ export default class Init extends Command {
             }
         }
         const defaultContent = TOML.stringify(defaultConfigJson)
-        this.log('toml:' + defaultContent)
         fs.access(configFile, fs.constants.F_OK, error => {
             if (error) {
-                this.log('init file: codegpt.toml')
+                this.log('init file: codellms.toml')
                 fs.writeFile(configFile, defaultContent, err => {
                     if (err) throw err;
-                    this.log('codegpt.toml is created successfully')
+                    this.log('codellms.toml is created successfully')
                 })
             } else {
-                this.error('codegpt.toml already exists!')
+                this.error('codellms.toml already exists!')
             }
         })
 
+        if (!fs.existsSync('./features')) {
+            fs.mkdirSync('./features', { recursive: true })
+        }
     }
 }
