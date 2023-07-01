@@ -10,7 +10,6 @@ import { AstBuilder, GherkinClassicTokenMatcher, Parser, compile } from '@cucumb
 import { IdGenerator } from '@cucumber/messages'
 import { Configuration, OpenAIApi } from 'openai'
 import { stderr } from 'process'
-//import { createHash } from "cryptography"
 import { createHash } from 'node:crypto'
 
 //let chats = []
@@ -20,13 +19,14 @@ export default class Build extends Command {
         features: Flags.string({ char: 'f', description: 'features dir', required: false, default: './features/' }),
     }
     chats: Array<any> = []
-    openai!: OpenAIApi;
+    openai!: OpenAIApi
+    openaiConfig: { [key: string]: any } = {}
     async run(): Promise<void> {
         const { flags } = await this.parse(Build)
         const configFile = fs.readFileSync(flags.config, 'utf-8')
         const config = JSON.parse(JSON.stringify(TOML.parse(configFile)))
         this.log('go go go')
-        const apiKey = config['openai']['api_key'] || process.env['openai_api_key']
+        const apiKey = config['openai']?.['api_key'] || process.env['openai_api_key']
         if (!apiKey) {
             this.error('must provide openai api key')
             return;
@@ -34,6 +34,8 @@ export default class Build extends Command {
         const configuration = new Configuration({
             apiKey
         });
+        this.openaiConfig['model'] = config['openai']?.['model'] || 'gpt-3.5-turbo'
+        this.openaiConfig['temperature'] = config['openai']?.['temperature'] || '0.4'
         this.openai = new OpenAIApi(configuration);
         this.chats.push(this.buildFirstChat(config))
         //if the lock file does not exist
@@ -85,9 +87,9 @@ The format below is incorrect:
     }
     async askgpt(question: Array<any>): Promise<string | undefined> {
         const response = await this.openai.createChatCompletion({
-            model: 'gpt-3.5-turbo',
+            model: this.openaiConfig['model'],
             messages: question,
-            temperature: 0.4
+            temperature: this.openaiConfig['temperature']
         })
         this.log('chatgpt response:')
         const result = response.data.choices?.[0]

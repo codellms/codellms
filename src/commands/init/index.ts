@@ -20,7 +20,7 @@ export default class Init extends Command {
                 debug_retry: 3
             },
             openai: {
-                api_key: 'xxx',
+                api_key: '<your_openai_api_key>',
                 temperature: 0.5,
                 model: 'gpt-3.5-turbo'
             }
