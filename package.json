@@ -1,6 +1,6 @@
 {
   "name": "codellms",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "auto create all project code use gpt.",
   "author": "guoxing45@gmail.com",
   "bin": {
@@ -75,7 +75,11 @@
   },
   "bugs": "https://github.com/codellms/codellms/issues",
   "keywords": [
-    "oclif", "codegpt", "codellms", "openai", "code generate"
+    "oclif",
+    "codegpt",
+    "codellms",
+    "openai",
+    "code generate"
   ],
   "types": "dist/index.d.ts"
 }
