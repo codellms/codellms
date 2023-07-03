@@ -9,7 +9,7 @@ Currently, only API type backend projects have been tested using Express in the 
 - [x] automatic debug (The effect is not very good.)
 - [x] Support modification and addition of requirements without re-running the entire project
 - [ ] If the project is a RESTful API project, generate Swagger.
-- [ ] Create different dialogue contexts based on the feature files.
+- [x] Create different dialogue contexts based on the feature files.
 - [ ] Support using Claude API for code generation.
 - [ ] Use database structure to assist GPT in understanding entity classes.
 - [ ] The new project supports generating DB migrate to create database structure.

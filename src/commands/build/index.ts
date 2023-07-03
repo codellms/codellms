@@ -259,7 +259,9 @@ null
         // read codellms lock file end.
         let resetIndex = this.chats.length//
         for (let j = 0; j < filenames.length; j++) {
-            this.chats.splice(resetIndex, this.chats.length)
+            if(resetIndex < this.chats.length - 1){
+                this.chats.splice(resetIndex, this.chats.length)
+            }// Each feature context starts anew.
             const file = filenames[j]
             if (path.extname(file) === '.feature') {
                 const spec = fs.readFileSync(path.join(featuredir.toString(), file), 'utf-8')
@@ -293,13 +295,19 @@ Let's think step by step. ` }
                 let answer = await this.askgpt(this.chats) as string
                 answer = this.getBlockContent(answer, 'code') as string
                 const codeFiels = Array.from(JSON.parse(answer))
+                // todo: delete integrity
+                let projectFiles = {...lockFeatureJson['features']}
+                for (const k in projectFiles){
+                    delete projectFiles[k]['integrity']
+                }
                 for (let i = 0; i < codeFiels.length; i++) {
                     const f = codeFiels[i] as string
                     this.log('code file:', f)
                     lockFeatureJson['features'][file]['childrens'].push(f)
                     this.chats.push({
                         "role": "user", "content": `
-Please provide the content of file ${f}, and think step by step to make the code clean, maintainable, and accurate.
+The project documentation lists the following, so that you can understand the structure of the project, the existing files, and their functionalities:${projectFiles};
+Please provide the content of file ${f}, and make the code clean, maintainable, and accurate.
 The replied code should be complete, with comments for each method. Other than that, no additional explanation is necessary.
 Please return the corresponding content in the following format.
 [[code]]
@@ -351,7 +359,6 @@ insert code here
         }
         this.execCommand(answer, {
             onSuccess: () => {
-                this.log('onsuccess callback')
                 exit(1)
             },
             onError: retryAsk
