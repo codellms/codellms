@@ -45,7 +45,7 @@ export default class Build extends Command {
         await this.parseFeatures(flags.features)//create code with features
         await this.createMainfile()
         await this.installDependencies()
-        await this.tryBuildOrStart()// debug with unitest,build...
+        await this.tryBuildOrStart(config['basic']?.['debug_retry'])// debug with unitest,build...
     }
 
     buildFirstChat(config: any) {
@@ -252,12 +252,14 @@ null
         const matcher = new GherkinClassicTokenMatcher()
         const parser = new Parser(builder, matcher)
 
-        const filenames = fs.readdirSync(featuredir)
+        const filenames = fs.readdirSync(featuredir)// todo sort
         // start read codellms lock file.
         let lockFeatureJson: { [key: string]: any } = this.getLockFile();
 
         // read codellms lock file end.
+        let resetIndex = this.chats.length//
         for (let j = 0; j < filenames.length; j++) {
+            this.chats.splice(resetIndex, this.chats.length)
             const file = filenames[j]
             if (path.extname(file) === '.feature') {
                 const spec = fs.readFileSync(path.join(featuredir.toString(), file), 'utf-8')
@@ -316,16 +318,15 @@ insert code here
         this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
         // build project , tell project index to gpt if has error
     }
-    async tryBuildOrStart(): Promise<void> {
+    async tryBuildOrStart(debugRetry:): Promise<void> {
         // todo: If it's a scripting language use unit tests instead of running the project.
         const ask = { "role": "user", "content": "Please tell me the startup (scripting language) or build (compiled language) command for this project. so that I can run it in the current directory to get a preliminary idea of whether there are any errors .This command hopes that the console will not output warning, and the information you reply will only be executable commands, without any other information. For example, return it like this: RUSTFLAGS=-Awarnings cargo build." }
         this.chats.push(ask)
         let answer = await this.askgpt(this.chats)
         this.log('build command:', answer)
-        let retryConfig = 1// from config file
         let retry = 0
         const retryAsk = async (err: string) => {
-            if (retry > retryConfig)
+            if (retry > debugRetry)
                 return
             retry += 1;
             // ask gpt
