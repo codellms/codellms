@@ -108,17 +108,25 @@ The format below is incorrect:
     // if the codellms.lock does not exist.
     async initProject(): Promise<void> {
         // init project
-        const chat = { "role": "user", "content": `Please tell me what command to use to initialize this project in the current directory. Reply with the executable command that can automatically confirm execution without any user interaction. Please do not include any further explanation in your response. For example, a valid response could be: "npx express-generator . --no-view && npm install -y".` }
+        const chat = { "role": "user", "content": `Please tell me what command to use to initialize this project in the current directory. Reply with the executable command that can automatically confirm execution without any user interaction. Please do not include any further explanation in your response. For example, a valid response could be: "echo y | npx express-generator . --no-view && npm install -y".` }
         this.chats.push(chat)
         let initCommandAnswer = await this.askgpt(this.chats)
         initCommandAnswer = this.cleanCodeBlock(initCommandAnswer!) as string
         this.execCommand(initCommandAnswer)
-        touch('codellms.lock')
+        touch('codellms-lock.json')
         // init folder
-        this.chats.push({ "role": "user", "content": `Please tell me which folders need to be created, and return them in an array. Multi-level directories can be represented directly as "a/b/c".` })
-        const answer = await this.askgpt(this.chats)
-        this.log('init folders:', answer)
-        Array.from(JSON.parse(answer!)).forEach(f => {
+        this.chats.push({
+            "role": "user", "content": `Please tell me which folders need to be created, and return them in an array. Multi-level directories can be represented directly as "a/b/c". For example:
+[[code]]
+"src/xxx/yyy/zzz",
+"src/abc"
+[[/code]]
+.
+` })
+        let folderAnswer: string = await this.askgpt(this.chats) as string
+        folderAnswer = this.getBlockContent(folderAnswer, 'code')
+        this.log('init folders:', folderAnswer)
+        Array.from(JSON.parse(folderAnswer!)).forEach(f => {
             const fd = f as fs.PathLike
             this.createFolder(fd)
         })// init folder
@@ -169,10 +177,6 @@ The format below is incorrect:
         this.chats.push(chat)
         const answer = await this.askgpt(this.chats)
         this.execCommand(answer)
-        // exec()
-        // which dependencies
-        // what is install command?
-        // evel install ,example:npm install
     }
     // remove ````
     cleanCodeBlock(codeContent: string | NodeJS.ArrayBufferView): string | NodeJS.ArrayBufferView {
@@ -252,18 +256,19 @@ null
         const matcher = new GherkinClassicTokenMatcher()
         const parser = new Parser(builder, matcher)
 
-        const filenames = fs.readdirSync(featuredir)// todo sort
+        const filenames = fs.readdirSync(featuredir).sort()
         // start read codellms lock file.
         let lockFeatureJson: { [key: string]: any } = this.getLockFile();
 
         // read codellms lock file end.
         let resetIndex = this.chats.length//
         for (let j = 0; j < filenames.length; j++) {
-            if(resetIndex < this.chats.length - 1){
+            if (resetIndex < this.chats.length - 1) {
                 this.chats.splice(resetIndex, this.chats.length)
             }// Each feature context starts anew.
             const file = filenames[j]
             if (path.extname(file) === '.feature') {
+                this.log('feature file:', file)
                 const spec = fs.readFileSync(path.join(featuredir.toString(), file), 'utf-8')
                 const specHash = createHash('sha512').update(spec, 'utf-8').digest('hex')
                 // Determine whether the file has been modified
@@ -281,6 +286,11 @@ null
                     }
                 }// init feature file node
 
+                let projectFiles = { ...lockFeatureJson['features'] }
+                for (const k in projectFiles) {
+                    delete projectFiles[k]['integrity']
+                }
+                this.log('project files: ', projectFiles)
                 const chat = {
                     "role": "user", "content": `There is a requirement described in a BDD-like format, which describes the features that need to be created in the scenario.
 Now, please tell me the list of files with file paths that need to be created based on the requirement, and return them in an array.
@@ -290,23 +300,38 @@ Sort the array in reverse order according to the call tree relationship and arra
 [[/code]]
 .
 The requirements content are as follows: \`\`\`${spec.toString()} \`\`\`.
+The project file lists the following:
+\`\`\`${projectFiles}\`\`\`,
+so that you can understand the structure of the project, and their functionalities, lease use the same files whenever possible for the same functionalities, and follow the current file structure.;
 Let's think step by step. ` }
                 this.chats.push(chat)
                 let answer = await this.askgpt(this.chats) as string
                 answer = this.getBlockContent(answer, 'code') as string
                 const codeFiels = Array.from(JSON.parse(answer))
                 // todo: delete integrity
-                let projectFiles = {...lockFeatureJson['features']}
-                for (const k in projectFiles){
-                    delete projectFiles[k]['integrity']
-                }
                 for (let i = 0; i < codeFiels.length; i++) {
                     const f = codeFiels[i] as string
                     this.log('code file:', f)
+                    let oldCode: string | undefined
+                    let modifyCodePrompt: string = ''
+                    const childrenFiles: Array<string> | undefined = projectFiles?.[file]?.['childrens']
+                    if (childrenFiles !== undefined && childrenFiles?.findIndex(x => x == f) > -1) {
+                        // get old code file
+                        oldCode = fs.readFileSync(f, 'utf-8')
+                        modifyCodePrompt = `The code file provided currently exists, therefore, the existing code is provided below.
+If there is other code in the provided code that differs from your current requirements, please keep it, They should be returned as a complete code.
+The old code is as follows:
+[[code]]
+${oldCode}
+[[/code]]
+.You need to return the complete modified code.
+`
+                    }
                     lockFeatureJson['features'][file]['childrens'].push(f)
+                    const editCodePrompt = oldCode !== undefined
                     this.chats.push({
                         "role": "user", "content": `
-The project documentation lists the following, so that you can understand the structure of the project, the existing files, and their functionalities:${projectFiles};
+${modifyCodePrompt}
 Please provide the content of file ${f}, and make the code clean, maintainable, and accurate.
 The replied code should be complete, with comments for each method. Other than that, no additional explanation is necessary.
 Please return the corresponding content in the following format.
@@ -326,7 +351,8 @@ insert code here
         this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
         // build project , tell project index to gpt if has error
     }
-    async tryBuildOrStart(debugRetry:): Promise<void> {
+
+    async tryBuildOrStart(debugRetry: number): Promise<void> {
         // todo: If it's a scripting language use unit tests instead of running the project.
         const ask = { "role": "user", "content": "Please tell me the startup (scripting language) or build (compiled language) command for this project. so that I can run it in the current directory to get a preliminary idea of whether there are any errors .This command hopes that the console will not output warning, and the information you reply will only be executable commands, without any other information. For example, return it like this: RUSTFLAGS=-Awarnings cargo build." }
         this.chats.push(ask)
