@@ -2,7 +2,7 @@ Feature: TodoList API project using RESTful style, utilizing "todos" as the endp
 Scenario: Add a new todo item.
 Given: An input parameter that is a string of "todo" for the todo item.
 When: post
-Then: Record the todo item in memory so that the entire todolist can be returned to the frontend.
+Then: Record the todo item and id in memory so that the entire todolist can be returned to the frontend.
 Scenario: Return the todolist.
 When: get
 Then: Return the newly added todolist.
