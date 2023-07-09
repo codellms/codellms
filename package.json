@@ -1,6 +1,6 @@
 {
   "name": "codellms",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "auto create all project code use gpt.",
   "author": "guoxing45@gmail.com",
   "bin": {
