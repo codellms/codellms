@@ -37,7 +37,7 @@ export default class Build extends Command {
         this.openaiConfig['model'] = config['openai']?.['model'] || 'gpt-3.5-turbo'
         this.openaiConfig['temperature'] = config['openai']?.['temperature'] || '0.4'
         this.openai = new OpenAIApi(configuration);
-        this.chats.push(this.buildFirstChat(config))
+        this.chats.push(this.buildSystemChat(config))
         //if the lock file does not exist
         if (!test('-f', './codellms-lock.json')) {
             await this.initProject()
@@ -48,16 +48,19 @@ export default class Build extends Command {
         await this.tryBuildOrStart(config['basic']?.['debug_retry'])// debug with unitest,build...
     }
 
-    buildFirstChat(config: any) {
+    buildSystemChat(config: any) {
         let osPlatform: string = os.platform()
         let osVersion: string = os.release()
         if (osPlatform == 'darwin') {
             osVersion = exec('sw_vers -productVersion').stdout
             osPlatform = 'macOS'
         }
+        const projectType = config['basic']?.['type']? `This is an application of ${config['basic']['type']} type.`: ''
+        const typeInfo = config[config['basic']?.['type']]? `and its requirements are as follows:${config[config['basic']?.['type']]};`:'';
         return {
             "role": "system", "content": `You are ChatGPT, a large language model trained by OpenAI.I hope you can act as a coding expert and use ${config['basic']['language']} to develop using the following framework or library: ${JSON.stringify(config['dependencies'])}, and use ${config['basic']['arch']} pattern for project architecture.
-You need to return in the format I requested, without any other content. No explanation or other non-code replies are required.
+            ${projectType} ${typeInfo}
+You need to return in the format I requested, Output only in the format as per my requirements,and nothing else. Do not write explanations. Do not type commands unless I instruct you to do so.
 For example, when I ask you to return an array, In the following format:
 [[code]]
 insert array here
@@ -305,9 +308,13 @@ null
                 this.log('project files: ', projectFiles)
                 const chat = {
                     "role": "user", "content": `Based on the provided BDD-like requirement and the existing project files, please generate a list of file paths that need to be updated or created to implement the required features. When updating existing files, make sure to preserve and extend the existing functionality. Sort the array according to the call tree relationship, with the files being called listed first, and use double quotes for array items of character type. Exclude notes and punctuation other than the array object.
-The BDD-like requirement content is as follows: \`\`\`${spec.toString()} \`\`\`.
+                    For example: 
+                    [[code]]
+                    ["./src/model/xxx.js", "./src/controller/xxx.js"]
+                    [[/code]]
+.The BDD-like requirement content is as follows: \`\`\`${spec.toString()} \`\`\`.
 The existing project files and their paths are listed here: \`\`\`${projectFiles}\`\`\`.
-Please consider the current project structure and functionalities, reuse existing files whenever possible, and follow the current file structure. Now let's analyze the requirement and project files step by step.` }
+Please consider the current project structure and functionalities, reuse existing files whenever possible, and follow the current file structure. Now let's analyze the requirement and project files step by step.Output only in the format as per my requirements,Output only in the format as per my requirements, and nothing else. Do not write explanations. Do not type commands unless I instruct you to do so.` }
                 this.chats.push(chat)
                 let answer = await this.askgpt(this.chats) as string
                 answer = this.getBlockContent(answer, 'code') as string

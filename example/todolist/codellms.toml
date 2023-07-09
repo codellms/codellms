@@ -4,6 +4,9 @@ express='4.18.2'
 [basic]
 language = "node"
 arch = "mvc"
+type="api"
 [openai]
 api_key = ""
 temperature=0.5
+[api]
+stype="RESTful"
