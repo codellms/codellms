@@ -1,0 +1,13 @@
+[dependencies]
+"@apollo/server"='4.4.0'
+graphql='16.6.0'
+graphql-tag='2.12.6'
+[basic]
+language = "javascript"
+arch = "mvc"
+type="api"
+[openai]
+api_key = ""
+temperature=0.5
+[api]
+style="graphql"

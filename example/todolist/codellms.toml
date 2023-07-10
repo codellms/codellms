@@ -9,4 +9,4 @@ type="api"
 api_key = ""
 temperature=0.5
 [api]
-stype="RESTful"
+style="RESTful"

@@ -1,0 +1,17 @@
+{
+  "name": "todolist",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "codellms build"
+  },
+  "dependencies": {
+    "@apollo/server": "^4.7.5",
+    "codellms": "../../",
+    "express": "^4.18.2",
+    "graphql": "^16.7.1",
+    "graphql-tag": "^2.12.6",
+    "sequelize": "^6.32.1",
+    "sqlite3": "^5.1.6"
+  }
+}
