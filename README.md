@@ -1,4 +1,5 @@
-# codellms
+# codellms 
+[![npm version](https://badge.fury.io/js/codellms.svg)](https://badge.fury.io/js/codellms)
 Use gpt to generate a complete api project, supporting multiple programme languages.
 Currently, only API type backend projects have been tested using Express in the example/todolist directory. It is not recommended for frontend projects. When GPT-4 opens up multimodal support, I believe that complete frontend and backend projects can be generated, and the frontend project can be generated based on the automatically generated API.
 
