@@ -11,7 +11,7 @@ import { IdGenerator } from '@cucumber/messages'
 import { Configuration, OpenAIApi, CreateChatCompletionRequest } from 'openai'
 import { stderr } from 'process'
 import { createHash } from 'node:crypto'
-import axios,{ AxiosError } from 'axios'
+import axios, { AxiosError } from 'axios'
 //let chats = []
 export default class Build extends Command {
     static flags = {
@@ -46,7 +46,7 @@ export default class Build extends Command {
         if (!test('-f', './codellms-lock.json')) {
             await this.initProject()
         }
-        await this.parseFeatures(flags.features)//create code with features
+        await this.parseFeatures(flags.features, config)//create code with features
         await this.createMainfile()
         await this.installDependencies()
         await this.tryBuildOrStart(config['basic']?.['debug_retry'])// debug with unitest,build...
@@ -59,11 +59,16 @@ export default class Build extends Command {
             osVersion = exec('sw_vers -productVersion').stdout
             osPlatform = 'macOS'
         }
-        const projectType = config['basic']?.['type']? `This is an application of ${config['basic']['type']} type.`: ''
-        const typeInfo = config[config['basic']?.['type']]? `and its requirements are as follows:${config[config['basic']?.['type']]};`:'';
+        const projectType = config['basic']?.['type'] ? `This is an application of ${config['basic']['type']} type.` : ''
+        const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${config[config['basic']?.['type']]};` : '';
+        const dbType = config['basic']?.['db']
+        const dbTypeInfo = dbType ? `It uses ${dbType} as the database.` : ''
+        const dbInfo = config['db']?.[dbType] ? `and the information of the database is:${config['db']?.[dbType]} ;` : ''
+
         return {
             "role": "system", "content": `You are ChatGPT, a large language model trained by OpenAI.I hope you can act as a coding expert and use ${config['basic']['language']} to develop using the following framework or library: ${JSON.stringify(config['dependencies'])}, and use ${config['basic']['arch']} pattern for project architecture.
             ${projectType} ${typeInfo}
+            ${dbTypeInfo} ${dbInfo}
 You need to return in the format I requested, Output only in the format as per my requirements,and nothing else. Do not write explanations. Do not type commands unless I instruct you to do so.
 For example, when I ask you to return an array, In the following format:
 [[code]]
@@ -88,28 +93,28 @@ The format below is incorrect:
         const regx = new RegExp(regxStr, 'sm')
         //if(regx.test(strInput)){
         let content = regx.exec(strInput)?.[1] || strInput
-        let markdownCodeRegx =  /```(?:\w+\n)?([\s\S]*?)```/g
+        let markdownCodeRegx = /```(?:\w+\n)?([\s\S]*?)```/g
         content = markdownCodeRegx.exec(content)?.[1] || content
         return content
         //}
         //return strInput
     }
     async askgpt(question: Array<any>): Promise<string | undefined> {
-        let req:CreateChatCompletionRequest = {
+        let req: CreateChatCompletionRequest = {
             model: this.openaiConfig['model'],
             messages: question,
             temperature: this.openaiConfig['temperature'],
             user: this.user
         }
-        if(this.user === undefined){
+        if (this.user === undefined) {
             delete req.user
         }
-        const sleep = (ms:number)=> {
+        const sleep = (ms: number) => {
             return new Promise(resolve => setTimeout(resolve, ms));
-          }
+        }
         let retry = 5 // when 5xx，then retry
         const requestGPT: (req: CreateChatCompletionRequest) => Promise<string | undefined> = async (req: CreateChatCompletionRequest): Promise<string | undefined> => {
-            try{
+            try {
                 const response = await this.openai.createChatCompletion(req)
                 const result = response.data.choices?.[0]
                 const answerResult: string | undefined = result?.message?.content
@@ -124,22 +129,22 @@ The format below is incorrect:
                 this.log(answerResult)
                 return answerResult
 
-            }catch(err: AxiosError | unknown){
-                if(retry === 0){
+            } catch (err: AxiosError | unknown) {
+                if (retry === 0) {
                     this.log('Reached the maximum number of retries (5 times), the program stops executing')
                     return
                 }
                 retry--
-                if (axios.isAxiosError(err))  {
-                    this.log('status code:',err.response?.status,'retrying...')
-                    if(err.response?.status !== undefined && err.response?.status >=500){
+                if (axios.isAxiosError(err)) {
+                    this.log('status code:', err.response?.status, 'retrying...')
+                    if (err.response?.status !== undefined && err.response?.status >= 500) {
                         await sleep(3000) // wait 2s
                         return requestGPT(req)
                     }
                 }
 
             }
-        } 
+        }
         return requestGPT(req)
         // try{
         //    return requestGPT(req)
@@ -152,13 +157,14 @@ The format below is incorrect:
         //     return requestGPT(req)
 
         // }
-        
+
     }
 
     // if the codellms.lock does not exist.
     async initProject(): Promise<void> {
         // init project
-        const chat = { "role": "user", "content": `Please tell me what command to use to initialize this project in the current directory. Reply with the executable command that contains "yes" to automatically confirm execution without any user interaction. Please do not include any further explanation in your response.
+        const chat = {
+            "role": "user", "content": `Please tell me what command to use to initialize this project in the current directory. Reply with the executable command that contains "yes" to automatically confirm execution without any user interaction. Please do not include any further explanation in your response.
         For example:
         echo y | npm init -y && npm install express --save && npm install -g nodemon
         Or:
@@ -208,7 +214,7 @@ The format below is incorrect:
         if (command && command.trim()) {
             const { onSuccess, onError } = cb || {}
             //let maybeDoExit = setTimeout(() => exit(1), 10000)// If the following commands are not automatically terminated
-            const execResult = new Promise<string>((resolve, reject)=>{
+            const execResult = new Promise<string>((resolve, reject) => {
                 const process = exec(command.trim(), (code, stdout, stderr) => {
                     if (code !== 0) {
                         echo(`Error: exec command fail,command is: ${command}`)
@@ -216,7 +222,7 @@ The format below is incorrect:
                             onError(stderr)
                         }
                         reject(stderr)
-                        
+
                     } else {
                         this.log(`command: '${command}'executed successfully`)
                         if (onSuccess) {
@@ -224,7 +230,7 @@ The format below is incorrect:
                         }
                         resolve(stdout)
                     }
-                
+
                 })
                 process?.stdin?.on('data', (input) => {
                     process?.stdin?.write(input)
@@ -311,7 +317,7 @@ null
         }
     }
     // parse bdd feature file
-    async parseFeatures(featuredir: fs.PathLike) {
+    async parseFeatures(featuredir: fs.PathLike, config: { [key: string]: any }) {
         // 1.load file
         // 2. parse
         const uuid = IdGenerator.uuid()
@@ -347,7 +353,7 @@ null
                     integrity: specHash,
                     childrens: []// Code files generated by gpt
                 }// init feature file node
-               
+
                 let projectFiles = JSON.parse(JSON.stringify(lockFeatureJson['features']))
                 for (const k in projectFiles) {
                     delete projectFiles[k]['integrity']
@@ -397,12 +403,40 @@ final code here
                     //const filePath = f as fs.PathOrFileDescriptor
                     this.createFile(f, codeBody!)
                 }
+                // start db migration file
+                const dbtype = config['basic']['db']
+                if (dbtype && config['db']?.['need_migration_file']) {
+                    this.createDbMigragitonFile()
+                } // end db migration file
+
             }
         }
         this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
         // build project , tell project index to gpt if has error
     }
-
+    async createDbMigragitonFile() {
+        this.chats.push({
+            "role": "user",
+            "content": `If there is a need to generate a database migration file for the above requirement, please provide it in the following format:
+             [[file]]
+             insert db migration filen here
+             [[/file]]
+             [[code]]
+             insert db migration content here
+             [[/code]];
+             otherwise, return the null character in the following format:
+             [[file]]
+             null
+             [[/file]]
+             `
+        })
+        const codeMigContent = await this.askgpt(this.chats) as string
+        const migrationFile = this.getBlockContent(codeMigContent, 'file')
+        if (migrationFile != 'null') {
+            const dbMigrationCode = this.getBlockContent(codeMigContent, 'code')
+            this.createFile(migrationFile, dbMigrationCode)
+        }
+    }
     async tryBuildOrStart(debugRetry: number): Promise<void> {
         // todo: If it's a scripting language use unit tests instead of running the project.
         const ask = { "role": "user", "content": "Please tell me the startup (scripting language) or build (compiled language) command for this project. so that I can run it in the current directory to get a preliminary idea of whether there are any errors .This command hopes that the console will not output warning, and the information you reply will only be executable commands, without any other information. For example, return it like this: RUSTFLAGS=-Awarnings cargo build." }
