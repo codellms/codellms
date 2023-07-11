@@ -17,12 +17,23 @@ export default class Init extends Command {
             basic: {
                 language: 'nodejs',
                 arch: 'clean architecture',
-                debug_retry: 3
+                debug_retry: 3,
+                type: 'api',
+                db: 'sqlite'
             },
             openai: {
                 api_key: '<your_openai_api_key>',
                 temperature: 0.5,
                 model: 'gpt-3.5-turbo'
+            },
+            api: {
+                style: "restful"
+            },
+            db: {
+                need_migration_file: false,
+                sqlite: {
+                    url: './db.sqlite',
+                }
             }
         }
         const defaultContent = TOML.stringify(defaultConfigJson)

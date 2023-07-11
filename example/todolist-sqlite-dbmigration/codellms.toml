@@ -1,14 +1,18 @@
 [dependencies]
-"@apollo/server"='4.4.0'
-graphql='16.6.0'
-graphql-tag='2.12.6'
+express='4'
 [basic]
 language = "javascript"
 arch = "mvc"
 type="api"
+db="sqlite"
 [openai]
 api_key = ""
 model="gpt-4"
 temperature=0.5
 [api]
-style="graphql"
+style="restful"
+[db]
+need_migration_file=true
+[db.sqlite]
+uri='./db.sqlite'
+
