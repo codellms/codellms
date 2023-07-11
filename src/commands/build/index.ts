@@ -8,23 +8,26 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { AstBuilder, GherkinClassicTokenMatcher, Parser, compile } from '@cucumber/gherkin'
 import { IdGenerator } from '@cucumber/messages'
-import { Configuration, OpenAIApi } from 'openai'
+import { Configuration, OpenAIApi, CreateChatCompletionRequest } from 'openai'
 import { stderr } from 'process'
 import { createHash } from 'node:crypto'
-
+import axios,{ AxiosError } from 'axios'
 //let chats = []
 export default class Build extends Command {
     static flags = {
         config: Flags.string({ char: 'c', description: 'toml config file', required: false, default: './codellms.toml' }),
         features: Flags.string({ char: 'f', description: 'features dir', required: false, default: './features/' }),
+        user: Flags.string({ char: 'u', description: 'user parameters of openai api', required: false })
     }
     chats: Array<any> = []
     openai!: OpenAIApi
     openaiConfig: { [key: string]: any } = {}
+    user: string | undefined
     async run(): Promise<void> {
         const { flags } = await this.parse(Build)
         const configFile = fs.readFileSync(flags.config, 'utf-8')
         const config = JSON.parse(JSON.stringify(TOML.parse(configFile)))
+        this.user = flags.user?.trim() || undefined
         this.log('go go go')
         const apiKey = config['openai']?.['api_key'] || process.env['openai_api_key']
         const apiBase = config['openai']?.['api_base'] || process.env['openai_api_base'] || 'https://api.openai.com/v1'
@@ -92,23 +95,64 @@ The format below is incorrect:
         //return strInput
     }
     async askgpt(question: Array<any>): Promise<string | undefined> {
-        const response = await this.openai.createChatCompletion({
+        let req:CreateChatCompletionRequest = {
             model: this.openaiConfig['model'],
             messages: question,
-            temperature: this.openaiConfig['temperature']
-        })
-        this.log('chatgpt response:')
-        const result = response.data.choices?.[0]
-        const answerResult: string | undefined = result?.message?.content
-        if (result?.finish_reason === 'stop' || result?.finish_reason === 'content_filter') {
-            this.chats.push({ "role": result?.message?.role, "content": answerResult })
-        } else {
-            this.log('gpt need continue')
-            //this.chats.push({ "role": "user", "content": "continue"})
-            //this.askgpt(this.chats)// continue
+            temperature: this.openaiConfig['temperature'],
+            user: this.user
         }
-        this.log(answerResult)
-        return answerResult
+        if(this.user === undefined){
+            delete req.user
+        }
+        const sleep = (ms:number)=> {
+            return new Promise(resolve => setTimeout(resolve, ms));
+          }
+        let retry = 5 // when 5xx，then retry
+        const requestGPT: (req: CreateChatCompletionRequest) => Promise<string | undefined> = async (req: CreateChatCompletionRequest): Promise<string | undefined> => {
+            try{
+                const response = await this.openai.createChatCompletion(req)
+                const result = response.data.choices?.[0]
+                const answerResult: string | undefined = result?.message?.content
+                if (result?.finish_reason === 'stop' || result?.finish_reason === 'content_filter') {
+                    this.chats.push({ "role": result?.message?.role, "content": answerResult })
+                } else {
+                    this.log('gpt need continue')
+                    //this.chats.push({ "role": "user", "content": "continue"})
+                    //this.askgpt(this.chats)// continue
+                }
+                this.log('chatgpt response:')
+                this.log(answerResult)
+                return answerResult
+
+            }catch(err: AxiosError | unknown){
+                if(retry === 0){
+                    this.log('Reached the maximum number of retries (5 times), the program stops executing')
+                    return
+                }
+                retry--
+                if (axios.isAxiosError(err))  {
+                    this.log('status code:',err.response?.status,'retrying...')
+                    if(err.response?.status !== undefined && err.response?.status >=500){
+                        await sleep(3000) // wait 2s
+                        return requestGPT(req)
+                    }
+                }
+
+            }
+        } 
+        return requestGPT(req)
+        // try{
+        //    return requestGPT(req)
+        // } catch(e){
+        //     this.log('server 502:',e)
+        //     if(retry === 0){
+        //         return
+        //     }
+        //     retry--
+        //     return requestGPT(req)
+
+        // }
+        
     }
 
     // if the codellms.lock does not exist.

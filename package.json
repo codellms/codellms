@@ -23,7 +23,7 @@
     "@oclif/core": "^2",
     "@oclif/plugin-help": "^5",
     "@oclif/plugin-plugins": "^2.4.7",
-    "openai": "^3.2.1"
+    "openai": "^3.3.0"
   },
   "devDependencies": {
     "@oclif/test": "^2.3.19",
