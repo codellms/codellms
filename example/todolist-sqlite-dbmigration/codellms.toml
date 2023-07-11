@@ -8,11 +8,13 @@ db="sqlite"
 [openai]
 api_key = ""
 model="gpt-4"
+api_base=""
 temperature=0.5
 [api]
 style="restful"
 [db]
 need_migration_file=true
 [db.sqlite]
-uri='./db.sqlite'
+uri="./db.sqlite"
+dbname="todos"
 

@@ -70,20 +70,7 @@ export default class Build extends Command {
             ${projectType} ${typeInfo}
             ${dbTypeInfo} ${dbInfo}
 You need to return in the format I requested, Output only in the format as per my requirements,and nothing else. Do not write explanations. Do not type commands unless I instruct you to do so.
-For example, when I ask you to return an array, In the following format:
-[[code]]
-insert array here
-[[/code]]
-,you only need to reply with an array, such as returning this content directly:
-[[code]]
-["a", "b", "c"]
-[[/code]]
-.
-The format below is incorrect:
-\`\`\`javascript
-["a", "b", "c"]
-\`\`\`
-.Current OS is ${osPlatform}, os version is ${osVersion}`
+Current OS is ${osPlatform}, os version is ${osVersion}`
         }
     }
     getBlockContent(strInput: string, blockName: string): string {
@@ -112,7 +99,7 @@ The format below is incorrect:
         const sleep = (ms: number) => {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
-        let retry = 5 // when 5xx，then retry
+        let retry = 10 // when 5xx，then retry
         const requestGPT: (req: CreateChatCompletionRequest) => Promise<string | undefined> = async (req: CreateChatCompletionRequest): Promise<string | undefined> => {
             try {
                 const response = await this.openai.createChatCompletion(req)
@@ -131,14 +118,14 @@ The format below is incorrect:
 
             } catch (err: AxiosError | unknown) {
                 if (retry === 0) {
-                    this.log('Reached the maximum number of retries (5 times), the program stops executing')
+                    this.log('Reached the maximum number of retries (10 times), the program stops executing')
                     return
                 }
                 retry--
                 if (axios.isAxiosError(err)) {
                     this.log('status code:', err.response?.status, 'retrying...')
                     if (err.response?.status !== undefined && err.response?.status >= 500) {
-                        await sleep(3000) // wait 2s
+                        await sleep(5000) // wait
                         return requestGPT(req)
                     }
                 }
@@ -146,18 +133,7 @@ The format below is incorrect:
             }
         }
         return requestGPT(req)
-        // try{
-        //    return requestGPT(req)
-        // } catch(e){
-        //     this.log('server 502:',e)
-        //     if(retry === 0){
-        //         return
-        //     }
-        //     retry--
-        //     return requestGPT(req)
-
-        // }
-
+      
     }
 
     // if the codellms.lock does not exist.
@@ -166,20 +142,26 @@ The format below is incorrect:
         const chat = {
             "role": "user", "content": `Please tell me what command to use to initialize this project in the current directory. Reply with the executable command that contains "yes" to automatically confirm execution without any user interaction. Please do not include any further explanation in your response.
         For example:
+        [[code]]
         echo y | npm init -y && npm install express --save && npm install -g nodemon
+        [[/code]]
         Or:
-        npm init -y && npm install express --save  && npm install -g nodemon` }
+        [[code]]
+        npm init -y && npm install express --save  && npm install -g nodemon
+        [[/code]]` }
         this.chats.push(chat)
         let initCommandAnswer = await this.askgpt(this.chats)
-        initCommandAnswer = this.cleanCodeBlock(initCommandAnswer!) as string
+        initCommandAnswer = this.getBlockContent(initCommandAnswer!,'code') as string
         await this.execCommand(initCommandAnswer)
         touch('codellms-lock.json')
         // init folder
         this.chats.push({
             "role": "user", "content": `Please tell me which folders need to be created, and return them in an array. Multi-level directories can be represented directly as "a/b/c". For example:
 [[code]]
+[
 "src/xxx/yyy/zzz",
 "src/abc"
+]
 [[/code]]
 .
 ` })
@@ -428,6 +410,7 @@ final code here
              [[file]]
              null
              [[/file]]
+             .current time is ${new Date()}.
              `
         })
         const codeMigContent = await this.askgpt(this.chats) as string
