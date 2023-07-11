@@ -27,12 +27,13 @@ export default class Build extends Command {
         const config = JSON.parse(JSON.stringify(TOML.parse(configFile)))
         this.log('go go go')
         const apiKey = config['openai']?.['api_key'] || process.env['openai_api_key']
+        const apiBase = config['openai']?.['api_base'] || process.env['openai_api_base'] || 'https://api.openai.com/v1'
         if (!apiKey) {
-            this.error('must provide openai api key')
-            return;
+            return this.error('must provide openai api key')
         }
         const configuration = new Configuration({
-            apiKey
+            apiKey,
+            basePath: apiBase
         });
         this.openaiConfig['model'] = config['openai']?.['model'] || 'gpt-3.5-turbo'
         this.openaiConfig['temperature'] = config['openai']?.['temperature'] || '0.4'

@@ -46,9 +46,10 @@ express='4.18.2' # For the main framework version, such as Express or Spring Boo
 language = "node" # Java\Go\PHP...
 arch = "mvc" # or clean architecture ...
 [openai]
-api_key="<your_openai_aip_key>"
+api_key="<your_openai_aip_key>" # Required  Or you can use the environment variable:openai_api_key
 model="gpt-3.5-turbo"
 temperature=0.5
+api_base=""
 ```
 
 3. Generate your project code. 
