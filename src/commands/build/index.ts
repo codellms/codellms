@@ -100,6 +100,7 @@ Current OS is ${osPlatform}, os version is ${osVersion}`
             return new Promise(resolve => setTimeout(resolve, ms));
         }
         let retry = 10 // when 5xx，then retry
+        let sleepTime = 0
         const requestGPT: (req: CreateChatCompletionRequest) => Promise<string | undefined> = async (req: CreateChatCompletionRequest): Promise<string | undefined> => {
             try {
                 const response = await this.openai.createChatCompletion(req)
@@ -117,15 +118,17 @@ Current OS is ${osPlatform}, os version is ${osVersion}`
                 return answerResult
 
             } catch (err: AxiosError | unknown) {
-                if (retry === 0) {
+                retry--
+                sleepTime += 1000
+                if (retry < 0) {
                     this.log('Reached the maximum number of retries (10 times), the program stops executing')
                     return
                 }
-                retry--
+
                 if (axios.isAxiosError(err)) {
                     this.log('status code:', err.response?.status, 'retrying...')
                     if (err.response?.status !== undefined && err.response?.status >= 500) {
-                        await sleep(5000) // wait
+                        await sleep(sleepTime) // wait
                         return requestGPT(req)
                     }
                 }
@@ -388,7 +391,11 @@ final code here
                 // start db migration file
                 const dbtype = config['basic']['db']
                 if (dbtype && config['db']?.['need_migration_file']) {
-                    this.createDbMigragitonFile()
+                    lockFeatureJson['migration'] = lockFeatureJson['migration'] || []
+                    let migFile = await this.createDbMigragitonFile(lockFeatureJson['migration'])
+                    if(migFile){
+                        lockFeatureJson['migration'].push(migFile)
+                    }
                 } // end db migration file
 
             }
@@ -396,10 +403,11 @@ final code here
         this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
         // build project , tell project index to gpt if has error
     }
-    async createDbMigragitonFile() {
+    async createDbMigragitonFile(existDbMigFiles:Array<string>): Promise<string | null> {
+        const migFilesPrompt = existDbMigFiles.length>0?`Please refer to the existing database migration files to name this file:${existDbMigFiles};`: ''
         this.chats.push({
             "role": "user",
-            "content": `If there is a need to generate a database migration file for the above requirement, please provide it in the following format:
+            "content": `Generate a data migration file based on the data structure for writing to the database as described in the above code. ${migFilesPrompt} please provide it in the following format:
              [[file]]
              insert db migration filen here
              [[/file]]
@@ -410,15 +418,17 @@ final code here
              [[file]]
              null
              [[/file]]
-             .current time is ${new Date()}.
+             .If you need to include the current time as part of the file name, please use the following time: ${new Date()}.
              `
         })
         const codeMigContent = await this.askgpt(this.chats) as string
         const migrationFile = this.getBlockContent(codeMigContent, 'file')
-        if (migrationFile != 'null') {
+        if (migrationFile.trim() != 'null') {
             const dbMigrationCode = this.getBlockContent(codeMigContent, 'code')
             this.createFile(migrationFile, dbMigrationCode)
+            return migrationFile.trim()
         }
+        return null
     }
     async tryBuildOrStart(debugRetry: number): Promise<void> {
         // todo: If it's a scripting language use unit tests instead of running the project.
