@@ -31,7 +31,7 @@ export default class Build extends Command {
         this.log('go go go')
         const apiKey = config['openai']?.['api_key'] || process.env['openai_api_key']
         const apiBase = config['openai']?.['api_base']?.trim() || process.env['openai_api_base'] || 'https://api.openai.com/v1'
-        this.log('apibase:',apiBase)
+        this.log('apibase:', apiBase)
         if (!apiKey) {
             return this.error('must provide openai api key')
         }
@@ -62,7 +62,7 @@ export default class Build extends Command {
         }
         const projectType = config['basic']?.['type'] ? `This is an application of ${config['basic']['type']} type.` : ''
         const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${config[config['basic']?.['type']]};` : '';
-        const dbType = config['basic']?.['db']
+        const dbType = config['basic']?.['db'] || 'In-memory'
         const dbTypeInfo = dbType ? `It uses ${dbType} as the database.` : ''
         const dbInfo = config['db']?.[dbType] ? `and the information of the database is:${config['db']?.[dbType]} ;` : ''
 
@@ -137,7 +137,7 @@ Current OS is ${osPlatform}, os version is ${osVersion}`
             }
         }
         return requestGPT(req)
-      
+
     }
 
     // if the codellms.lock does not exist.
@@ -155,7 +155,7 @@ Current OS is ${osPlatform}, os version is ${osVersion}`
         [[/code]]` }
         this.chats.push(chat)
         let initCommandAnswer = await this.askgpt(this.chats)
-        initCommandAnswer = this.getBlockContent(initCommandAnswer!,'code') as string
+        initCommandAnswer = this.getBlockContent(initCommandAnswer!, 'code') as string
         await this.execCommand(initCommandAnswer)
         touch('codellms-lock.json')
         // init folder
@@ -228,9 +228,10 @@ Current OS is ${osPlatform}, os version is ${osVersion}`
     }
     // add and install dependencies to project.
     async installDependencies(): Promise<void> {
-        const chat = { "role": "user", "content": "Based on the code you provided, please tell me the command to add dependencies and which dependencies are needed. Please provide the command directly without explanation. Here is an example of what should be returned: npm install express uuid --save." }
+        const chat = { "role": "user", "content": "Based on the code you provided, please tell me the command to add dependencies and which dependencies are needed. Please provide the command directly without explanation. Here is an example of what should be returned: npm install express uuid --save or pip install a b c." }
         this.chats.push(chat)
-        const answer = await this.askgpt(this.chats)
+        let answer = await this.askgpt(this.chats)
+        answer = this.getBlockContent(answer!,'code')
         await this.execCommand(answer)
     }
     // remove ````
@@ -345,18 +346,14 @@ null
                     delete projectFiles[k]['integrity']
                 }
                 const chat = {
-                    "role": "user", "content": `Q:Based on the provided BDD-like requirement and the existing project files, please generate a list of file paths that need to be updated or created to implement the required features. When updating existing files, make sure to preserve and extend the existing functionality. Sort the array according to the call tree relationship, with the files being called listed first, and use double quotes for array items of character type.
-Exclude notes and punctuation other than the array object and list items are strings.
+                    "role": "user", "content": `Q:Please use the provided BDD-like requirements and existing project files to generate a list of file paths that should be updated or created to implement the required features. You do not need to provide the project entry file. When updating existing files, please ensure that the existing functionality is preserved and extended. Sort the array based on the call tree relationship, with the files being called listed first. Please use double quotes for array items of character type.
 The BDD-like requirement content is as follows: \`\`\`${spec.toString()} \`\`\`.
 The existing project files and their paths are listed here(In the childrens node): \`\`\`${projectFiles}\`\`\`.
-Please consider the current project structure and functionalities, reuse existing files whenever possible, and follow the current file structure. Now let's analyze the requirement and project files step by step.Output only in the format as per my requirements,Output and nothing else. Do not write explanations and comments. unless I instruct you to do so, Please return in the following format:
+Please consider the current project structure and functionalities, reuse existing files whenever possible, and follow the current file structure. Please return in the following format:
 [[code]]
-[
-"src/xxx/yyy/zzz.js",
-"src/abc.js"
-]
+['folder/folder/file','folder/file']
 [[/code]].
-A:Let's work this out in a step by step way to be sure we have the right answer.
+A:Let's work this out in a step by step way to be sure we have the right answer, Output and nothing else. Do not write explanations and comments. unless I instruct you to do so.
 ` }
                 this.chats.push(chat)
                 let answer = await this.askgpt(this.chats) as string
@@ -389,7 +386,7 @@ Please provide the final code of the ${f} in the following format:
 final code here
 [[/code]]
 .please provide clean, maintainable and accurate code with comments for each method.
-A:Let's work this out in a step by step way to be sure we have the right answer.`})
+A:Let's work this out in a step by step way to be sure we have the right answer.Output and nothing else. Do not write explanations and comments. unless I instruct you to do so.`})
                     const codeContent = await this.askgpt(this.chats) as string
                     //let codeBody = this.cleanCodeBlock(codeContent)
                     let codeBody = this.getBlockContent(codeContent, 'code')
@@ -402,7 +399,7 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
                 if (dbtype && config['db']?.['need_migration_file']) {
                     lockFeatureJson['migration'] = lockFeatureJson['migration'] || []
                     let migFile = await this.createDbMigragitonFile(lockFeatureJson['migration'])
-                    if(migFile){
+                    if (migFile) {
                         lockFeatureJson['migration'].push(migFile)
                     }
                 } // end db migration file
@@ -412,8 +409,8 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
         this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
         // build project , tell project index to gpt if has error
     }
-    async createDbMigragitonFile(existDbMigFiles:Array<string>): Promise<string | null> {
-        const migFilesPrompt = existDbMigFiles.length > 0? `Please refer to the existing database migration files to name this file:${existDbMigFiles};`: 'Does not currently exist migration file.'
+    async createDbMigragitonFile(existDbMigFiles: Array<string>): Promise<string | null> {
+        const migFilesPrompt = existDbMigFiles.length > 0 ? `Please refer to the existing database migration files to name this file:${existDbMigFiles};` : 'Does not currently exist migration file.'
         this.chats.push({
             "role": "user",
             "content": `Generate a data migration file based on the data structure for writing to the database as described in the above code. ${migFilesPrompt} please provide it in the following format:
@@ -445,17 +442,17 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
         return null
     }
     async tryBuildOrStart(debugRetry: number): Promise<void> {
-        
+
         const ask = { "role": "user", "content": "Please tell me the startup (scripting language) or build (compiled language) command for this project. so that I can run it in the current directory to get a preliminary idea of whether there are any errors .This command hopes that the console will not output warning, and the information you reply will only be executable commands, without any other information. For example, return it like this: RUSTFLAGS=-Awarnings cargo build." }
         this.chats.push(ask)
         let answer = await this.askgpt(this.chats)
         this.log('build command:', answer)
 
         let retry = 0
-         // Clear context, split steps
+        // Clear context, split steps
         this.chats = []
         this.chats.push({
-            "role": "system", "content":'You are a code expert, and you can help me solve problems in programming.'
+            "role": "system", "content": 'You are a code expert, and you can help me solve problems in programming.'
         })
         let lockFeatureJson: { [key: string]: any } = this.getLockFile()
         lockFeatureJson['features'] = lockFeatureJson['features'] || {}
@@ -480,17 +477,17 @@ insert code here(if the file exist)
             let tryCorretCode = await this.askgpt(this.chats) as string
             let filePath = this.getBlockContent(tryCorretCode, 'file')
             let maybeCorretCode = this.getBlockContent(tryCorretCode, 'code') as string
-            if(maybeCorretCode.startsWith('[[file]]')){//modify
-                const codeFile = fs.readFileSync(filePath,'utf-8')
+            if (maybeCorretCode.startsWith('[[file]]')) {//modify
+                const codeFile = fs.readFileSync(filePath, 'utf-8')
                 this.chats.push({
                     "role": "user",
-                    "content": `${filePath} file's code is: 
+                    "content": `${filePath} file's code is:
                     [[code]]
                     ${codeFile.toString()}
                     [/code]
                     .lease check the code step by step based on the error message, and then provide me with the modified code for this file:
                     [[code]]
-                    put correct code here(code for the entire file)
+                    put correct code here(The code of the entire file, not just the portion of code that was modifie)
                     [[/code]]`
                 })
                 tryCorretCode = await this.askgpt(this.chats) as string
@@ -503,7 +500,7 @@ insert code here(if the file exist)
             await this.execCommand(answer).then(() => exit(1)).catch(retryAsk)
 
         }
-       
+
         await this.execCommand(answer).then(() => exit(1)).catch(retryAsk)
     }
 }

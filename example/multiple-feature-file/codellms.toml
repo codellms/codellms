@@ -1,0 +1,13 @@
+[dependencies]
+fastapi='0'
+[basic]
+language = "python"
+arch = "mvc"
+type="api"
+[openai]
+api_key = ""
+model="gpt-3.5-turbo"
+api_base="https://api.openai.com/v1"
+temperature=0.5
+[api]
+style="restful"
