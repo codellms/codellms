@@ -48,7 +48,7 @@ export default class Build extends Command {
             await this.initProject()
         }
         await this.parseFeatures(flags.features, config)//create code with features
-        await this.createMainfile()
+        await this.createMainfile(config)
         await this.installDependencies()
         await this.tryBuildOrStart(config['basic']?.['debug_retry'] || 3)// debug with unitest,build...
     }
@@ -70,9 +70,9 @@ export default class Build extends Command {
             "role": "system", "content": `You are ChatGPT, a large language model trained by OpenAI.I hope you can act as a coding expert and use ${config['basic']['language']} to develop using the following framework or library: ${JSON.stringify(config['dependencies'])}, and use ${config['basic']['arch']} pattern for project architecture.
             ${projectType} ${typeInfo}
             ${dbTypeInfo} ${dbInfo}
-            Please ensure that your responses in all conversations are in the requested format. Please output only in the format specified by my requirements, without including any additional information. Please refrain from writing explanations or comments unless specifically instructed to do so.
-Current OS is ${osPlatform}, os version is ${osVersion}`
-        }
+            Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Please refrain from writing explanations or comments unless specifically instructed to do so.
+`
+        }//Current OS is ${osPlatform}, os version is ${osVersion}
     }
     getBlockContent(strInput: string, blockName: string): string {
         //const regxStr = `(?<=\[\[${blockName}\]\]\n)([\s\S]*?)(?=\n\[\[\/${blockName}\]\]$)`;
@@ -228,7 +228,7 @@ Current OS is ${osPlatform}, os version is ${osVersion}`
     }
     // add and install dependencies to project.
     async installDependencies(): Promise<void> {
-        const chat = { "role": "user", "content": "Based on the code you provided, please tell me the command to add dependencies and which dependencies are needed. Please provide the command directly without explanation. Here is an example of what should be returned: npm install express uuid --save or pip install a b c." }
+        const chat = { "role": "user", "content": "Based on the code you provided, please tell me the command to add dependencies and which dependencies are needed. Please provide the command directly without explanation. Here is an example of what should be returned: npm install express uuid --save or pip install a b c.Let's work this out in a step by step way to be sure we have the right answer" }
         this.chats.push(chat)
         let answer = await this.askgpt(this.chats)
         answer = this.getBlockContent(answer!,'code')
@@ -254,7 +254,16 @@ Current OS is ${osPlatform}, os version is ${osVersion}`
         }
         return lockFeatureJson
     }
-    async createMainfile() {
+    getClearFeatureFileList(lockFile:{ [key: string]: any }): Array<string> {
+        let features = JSON.parse(JSON.stringify(lockFile['features'] || {}))
+        let projectFiles: Array<string> = []
+        for (const k in features) {
+            projectFiles.join(features[k]['childrens'])
+            // delete features[k]['integrity']
+        }
+        return projectFiles
+    }
+    async createMainfile(config: { [key: string]: any }) {
         let lockFeatureJson: { [key: string]: any } = this.getLockFile();
 
         let chat = {
@@ -268,10 +277,20 @@ insert code here
 `}
         const mainFilePath: string | undefined = lockFeatureJson['main']?.['path']
         if (mainFilePath) {
+            this.log('main file modify')
             let mainFileContent = fs.readFileSync(mainFilePath)?.toString()
+            let featureFiles = this.getClearFeatureFileList(lockFeatureJson)
+            const routerPrompt = config['basic']?.['type'] == 'api'?`It should be noted that as an API project, it should aggregate the URL routes for all modules.Please find out which routes should be added from the project file I provided.`: ''
+            
             chat = {
                 "role": "user",
                 "content": `
+                I will provide you with the current file structure and code for existing entry files, please determine if any modifications are needed. 
+                ${routerPrompt}
+                The existing files are as follows:
+                [[json]]
+                ${featureFiles}
+                [[/json]]
 The code for my entry file is as follows:
 [[code]]
 ${mainFileContent}
@@ -314,7 +333,7 @@ null
 
         const filenames = fs.readdirSync(featuredir).sort()
         // start read codellms lock file.
-        let lockFeatureJson: { [key: string]: any } = this.getLockFile();
+        
 
         // read codellms lock file end.
         let resetIndex = this.chats.length//
@@ -324,6 +343,7 @@ null
             }// Each feature context starts anew.
             const file = filenames[j]
             if (path.extname(file) === '.feature') {
+                let lockFeatureJson: { [key: string]: any } = this.getLockFile();
                 this.log('feature file:', file)
                 const spec = fs.readFileSync(path.join(featuredir.toString(), file), 'utf-8')
                 const specHash = createHash('sha512').update(spec, 'utf-8').digest('hex')
@@ -341,20 +361,23 @@ null
                     childrens: []// Code files generated by gpt
                 }// init feature file node
 
-                let projectFiles = JSON.parse(JSON.stringify(lockFeatureJson['features']))
-                for (const k in projectFiles) {
-                    delete projectFiles[k]['integrity']
-                }
-                const chat = {
-                    "role": "user", "content": `Q:Please use the provided BDD-like requirements and existing project files to generate a list of file paths that should be updated or created to implement the required features. You do not need to provide the project entry file. When updating existing files, please ensure that the existing functionality is preserved and extended. Sort the array based on the call tree relationship, with the files being called listed first. Please use double quotes for array items of character type.
-The BDD-like requirement content is as follows: \`\`\`${spec.toString()} \`\`\`.
-The existing project files and their paths are listed here(In the childrens node): \`\`\`${projectFiles}\`\`\`.
-Please consider the current project structure and functionalities, reuse existing files whenever possible, and follow the current file structure. Please return in the following format:
+                let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
+                this.log(JSON.stringify(projectFiles))
+                const content = `
+                I will provide you with the feature requirements and files of the existing project (including the full path). Based on this, please tell me which files need to be created or modified. 
+The provided file paths should remain consistent with the original project structure,ensure the consistency of code architecture design.
+Feature Requirements:[[spec]]${spec.toString()}[[/spec]]
+
+Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
+
+I want you to reply the output of an array of files inside a unique code block, and nothing else. do not write explanations. For example:
 [[code]]
-['folder/folder/file','folder/file']
-[[/code]].
-A:Let's work this out in a step by step way to be sure we have the right answer, Output and nothing else. Do not write explanations and comments. unless I instruct you to do so.
-` }
+["folder/folder/file","folder/file"]
+[[/code]]
+Let's work this out in a step by step way to be sure we have the right answer.
+`
+                const chat = {
+                    "role": "user", "content": content }
                 this.chats.push(chat)
                 let answer = await this.askgpt(this.chats) as string
                 answer = this.getBlockContent(answer, 'code') as string
@@ -364,8 +387,8 @@ A:Let's work this out in a step by step way to be sure we have the right answer,
                     this.log('code file:', f)
                     let oldCode: string | undefined
                     let modifyCodePrompt: string = ''
-                    const childrenFiles: Array<string> | undefined = projectFiles?.[file]?.['childrens']
-                    if (childrenFiles !== undefined && childrenFiles?.findIndex(x => x == f) > -1) {
+                    // const childrenFiles: Array<string> | undefined = projectFiles?.[file]?.['childrens']
+                    if (projectFiles !== undefined && projectFiles?.findIndex(x => x == f) > -1) {
                         // get old code file
                         oldCode = fs.readFileSync(f, 'utf-8')
                         modifyCodePrompt = `The code file(${f}) provided currently exists, therefore, the existing code is provided below:
@@ -403,10 +426,10 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
                         lockFeatureJson['migration'].push(migFile)
                     }
                 } // end db migration file
-
+                this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
             }
         }
-        this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
+        // this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
         // build project , tell project index to gpt if has error
     }
     async createDbMigragitonFile(existDbMigFiles: Array<string>): Promise<string | null> {
@@ -455,17 +478,14 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
             "role": "system", "content": 'You are a code expert, and you can help me solve problems in programming.'
         })
         let lockFeatureJson: { [key: string]: any } = this.getLockFile()
-        lockFeatureJson['features'] = lockFeatureJson['features'] || {}
-        for (const k in lockFeatureJson['features']) {
-            delete lockFeatureJson['features'][k]['integrity']
-        }
+        let featureFiles = this.getClearFeatureFileList(lockFeatureJson)
         const retryAsk = async (err: string) => {
             if (retry > debugRetry)
                 return
             retry += 1;
             // ask gpt
             this.chats.push({
-                "role": "user", "content": `During program execution, the following error occurred: '${err}' .The files provided for the current project are as follows:${lockFeatureJson['features']}.
+                "role": "user", "content": `During program execution, the following error occurred: '${err}' .The files provided for the current project are as follows:${JSON.stringify(featureFiles)}.
                 According to the error message, please tell me the file that needs to be modified, and I will tell you its contents. If it is a brand-new file, please put the code in the [[code]] node. I will perform different operations based on whether the [[code]] node is empty. If there are multiple files to modify, only return the first file.No need to explain the modification, just provide me with the correct code.For example:
 [[file]]
 insert file path here
