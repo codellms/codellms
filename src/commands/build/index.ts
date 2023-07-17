@@ -48,7 +48,7 @@ export default class Build extends Command {
             await this.initProject()
         }
         await this.parseFeatures(flags.features, config)//create code with features
-        await this.createMainfile(config)
+        // await this.createMainfile(config)
         await this.installDependencies()
         await this.tryBuildOrStart(config['basic']?.['debug_retry'] || 3)// debug with unitest,build...
     }
@@ -249,7 +249,7 @@ export default class Build extends Command {
     getLockFile(): { [key: string]: any } {
         const codellmsLockFile = fs.readFileSync('codellms-lock.json')
         let lockFeatureJson: { [key: string]: any } = {};
-        if (!!codellmsLockFile.toString()?.trim()) {
+        if (!!codellmsLockFile?.toString()?.trim()) {
             lockFeatureJson = JSON.parse(codellmsLockFile.toString())
         }
         return lockFeatureJson
@@ -258,7 +258,7 @@ export default class Build extends Command {
         let features = JSON.parse(JSON.stringify(lockFile['features'] || {}))
         let projectFiles: Array<string> = []
         for (const k in features) {
-            projectFiles.join(features[k]['childrens'])
+            projectFiles = projectFiles.concat(features[k]['childrens'])
             // delete features[k]['integrity']
         }
         return projectFiles
@@ -275,13 +275,12 @@ put the file path here
 insert code here
 [[/code]]
 `}
-        const mainFilePath: string | undefined = lockFeatureJson['main']?.['path']
+        const mainFilePath: string | undefined = lockFeatureJson['mainfile']?.['path']
         if (mainFilePath) {
-            this.log('main file modify')
             let mainFileContent = fs.readFileSync(mainFilePath)?.toString()
             let featureFiles = this.getClearFeatureFileList(lockFeatureJson)
             const routerPrompt = config['basic']?.['type'] == 'api'?`It should be noted that as an API project, it should aggregate the URL routes for all modules.Please find out which routes should be added from the project file I provided.`: ''
-            
+           
             chat = {
                 "role": "user",
                 "content": `
@@ -309,7 +308,7 @@ null
         }
         this.chats.push(chat)
         const answer = await this.askgpt(this.chats) as string
-        const filePath = mainFilePath || this.getBlockContent(answer, 'file')
+        const filePath = mainFilePath || this.getBlockContent(answer, 'file')?.replace("'","")?.replace('"','')
         const codeBody = this.getBlockContent(answer, 'code')
         if (filePath && !!codeBody && codeBody !== "null") {
             this.createFile(filePath!, codeBody!)
@@ -326,16 +325,14 @@ null
     async parseFeatures(featuredir: fs.PathLike, config: { [key: string]: any }) {
         // 1.load file
         // 2. parse
+        /*  //bdd parse
         const uuid = IdGenerator.uuid()
         const builder = new AstBuilder(uuid)
         const matcher = new GherkinClassicTokenMatcher()
         const parser = new Parser(builder, matcher)
-
+        */
         const filenames = fs.readdirSync(featuredir).sort()
-        // start read codellms lock file.
-        
-
-        // read codellms lock file end.
+      
         let resetIndex = this.chats.length//
         for (let j = 0; j < filenames.length; j++) {
             if (resetIndex < this.chats.length - 1) {
@@ -370,7 +367,7 @@ Feature Requirements:[[spec]]${spec.toString()}[[/spec]]
 
 Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
 
-I want you to reply the output of an array of files inside a unique code block, and nothing else. do not write explanations. For example:
+I want you to reply the output of an js array of files inside a unique code block, and nothing else. do not write explanations. For example:
 [[code]]
 ["folder/folder/file","folder/file"]
 [[/code]]
@@ -427,6 +424,7 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
                     }
                 } // end db migration file
                 this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
+                await this.createMainfile(config)// updagte main file
             }
         }
         // this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))

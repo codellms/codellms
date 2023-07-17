@@ -1,0 +1,9 @@
+*
+node_modules/
+codellms-lock.json
+src/
+!features/*.feature
+!**/*.feature
+!codellms.toml
+!package.json
+!package-lock.json
