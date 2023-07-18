@@ -61,7 +61,7 @@ export default class Build extends Command {
             osPlatform = 'macOS'
         }
         const projectType = config['basic']?.['type'] ? `This is an application of ${config['basic']['type']} type.` : ''
-        const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${config[config['basic']?.['type']]};` : '';
+        const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${config[config['basic']?.['type']]};Build ${projectType} exactly as required` : '';
         const dbType = config['basic']?.['db'] || 'In-memory'
         const dbTypeInfo = dbType ? `It uses ${dbType} as the database.` : ''
         const dbInfo = config['db']?.[dbType] ? `and the information of the database is:${config['db']?.[dbType]} ;` : ''
@@ -231,7 +231,7 @@ export default class Build extends Command {
         const chat = { "role": "user", "content": "Based on the code you provided, please tell me the command to add dependencies and which dependencies are needed. Please provide the command directly without explanation. Here is an example of what should be returned: npm install express uuid --save or pip install a b c.Let's work this out in a step by step way to be sure we have the right answer" }
         this.chats.push(chat)
         let answer = await this.askgpt(this.chats)
-        answer = this.getBlockContent(answer!,'code')
+        answer = this.getBlockContent(answer!, 'code')
         await this.execCommand(answer)
     }
     // remove ````
@@ -254,7 +254,7 @@ export default class Build extends Command {
         }
         return lockFeatureJson
     }
-    getClearFeatureFileList(lockFile:{ [key: string]: any }): Array<string> {
+    getClearFeatureFileList(lockFile: { [key: string]: any }): Array<string> {
         let features = JSON.parse(JSON.stringify(lockFile['features'] || {}))
         let projectFiles: Array<string> = []
         for (const k in features) {
@@ -279,12 +279,12 @@ insert code here
         if (mainFilePath) {
             let mainFileContent = fs.readFileSync(mainFilePath)?.toString()
             let featureFiles = this.getClearFeatureFileList(lockFeatureJson)
-            const routerPrompt = config['basic']?.['type'] == 'api'?`It should be noted that as an API project, it should aggregate the URL routes for all modules.Please find out which routes should be added from the project file I provided.`: ''
-           
+            const routerPrompt = config['basic']?.['type'] == 'api' ? `It should be noted that as an API project, it should aggregate the URL routes for all modules.Please find out which routes should be added from the project file I provided.` : ''
+
             chat = {
                 "role": "user",
                 "content": `
-                I will provide you with the current file structure and code for existing entry files, please determine if any modifications are needed. 
+                I will provide you with the current file structure and code for existing entry files, please determine if any modifications are needed.
                 ${routerPrompt}
                 The existing files are as follows:
                 [[json]]
@@ -308,7 +308,7 @@ null
         }
         this.chats.push(chat)
         const answer = await this.askgpt(this.chats) as string
-        const filePath = mainFilePath || this.getBlockContent(answer, 'file')?.replace("'","")?.replace('"','')
+        const filePath = mainFilePath || this.getBlockContent(answer, 'file')?.replace("'", "")?.replace('"', '')
         const codeBody = this.getBlockContent(answer, 'code')
         if (filePath && !!codeBody && codeBody !== "null") {
             this.createFile(filePath!, codeBody!)
@@ -332,7 +332,11 @@ null
         const parser = new Parser(builder, matcher)
         */
         const filenames = fs.readdirSync(featuredir).sort()
-      
+        const folderStruct = config?.['basic']?.['folders'] || []
+        let folderStructPrompt = ''
+        if (folderStruct.length > 0) {
+            folderStructPrompt = `Please organize your code in the following folder structure:${folderStruct}.`
+        }
         let resetIndex = this.chats.length//
         for (let j = 0; j < filenames.length; j++) {
             if (resetIndex < this.chats.length - 1) {
@@ -361,8 +365,8 @@ null
                 let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
                 this.log(JSON.stringify(projectFiles))
                 const content = `
-                I will provide you with the feature requirements and files of the existing project (including the full path). Based on this, please tell me which files need to be created or modified. 
-The provided file paths should remain consistent with the original project structure,ensure the consistency of code architecture design.
+                I will provide you with the  files of the existing project (including the full path) and current feature requirements. Based on this, please tell me which files need to be created or modified.
+The provided file paths should remain consistent with the original project structure,${folderStructPrompt}ensure the consistency of code architecture design.
 Feature Requirements:[[spec]]${spec.toString()}[[/spec]]
 
 Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
@@ -374,7 +378,8 @@ I want you to reply the output of an js array of files inside a unique code bloc
 Let's work this out in a step by step way to be sure we have the right answer.
 `
                 const chat = {
-                    "role": "user", "content": content }
+                    "role": "user", "content": content
+                }
                 this.chats.push(chat)
                 let answer = await this.askgpt(this.chats) as string
                 answer = this.getBlockContent(answer, 'code') as string

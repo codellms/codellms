@@ -4,6 +4,7 @@ fastapi='0'
 language = "python"
 arch = "mvc"
 type="api"
+folders=["src/models", "src/controller", "src/services", "src/utils"]
 [openai]
 api_key = ""
 model="gpt-3.5-turbo"
