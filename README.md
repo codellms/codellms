@@ -16,7 +16,7 @@ Currently, only API type backend projects have been tested using Express in the 
 * [ ] Support using Claude API for code generation.
 * [ ] Use database structure to assist GPT in understanding entity classes.
 * [x] The new project supports generating DB migrate to create database structure.
-
+* [ ] Avoid importing different packages that provide the same functionality.
 ## Installation
 
 ```
