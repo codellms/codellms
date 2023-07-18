@@ -52,13 +52,14 @@ language = "node" # Java\Go\PHP...
 arch = "mvc" # or clean architecture ...
 type="api"
 db="xxx"
+folders=["src/models", "src/controller", "src/services", "src/utils"]
 [api]
 style="restful"
 [openai]
 api_key="<your_openai_aip_key>" # Required  Or you can use the environment variable:openai_api_key
 model="gpt-3.5-turbo"
 temperature=0.5
-api_base=""
+api_base="" # The default is https://api.openai.com/v1
 [db]
 need_migration_file=true
 [db.xxx]
