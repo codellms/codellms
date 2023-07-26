@@ -15,7 +15,7 @@ export default class Init extends Command {
                 express: '4.18.1'
             },
             basic: {
-                language: 'nodejs',
+                language: 'javascript',
                 arch: 'clean architecture',
                 debug_retry: 3,
                 type: 'api',
@@ -23,11 +23,12 @@ export default class Init extends Command {
             },
             openai: {
                 api_key: '<your_openai_api_key>',
+                api_base: 'https://api.openai.com/v1'
                 temperature: 0.5,
                 model: 'gpt-3.5-turbo'
             },
             api: {
-                style: "restful"
+                style: "RESTful"
             },
             db: {
                 need_migration_file: false,
@@ -51,6 +52,9 @@ export default class Init extends Command {
 
         if (!fs.existsSync('./features')) {
             fs.mkdirSync('./features', { recursive: true })
+        }
+        if (!fs.existsSync('./dbschemas')) {
+            fs.mkdirSync('./dbschemas', { recursive: true })
         }
     }
 }
