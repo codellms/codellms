@@ -23,7 +23,7 @@ export default class Init extends Command {
             },
             openai: {
                 api_key: '<your_openai_api_key>',
-                api_base: 'https://api.openai.com/v1'
+                api_base: 'https://api.openai.com/v1',
                 temperature: 0.5,
                 model: 'gpt-3.5-turbo'
             },
