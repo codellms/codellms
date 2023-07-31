@@ -60,17 +60,20 @@ export default class Build extends Command {
             osVersion = exec('sw_vers -productVersion').stdout
             osPlatform = 'macOS'
         }
-        const projectType = config['basic']?.['type'] ? `This is an application of ${config['basic']['type']} type.` : ''
+        const projectType = config['basic']?.['type'] ? `*. This is an application of ${config['basic']['type']} type.` : ''
         const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${config[config['basic']?.['type']]};Build ${projectType} exactly as required` : '';
         const dbType = config['basic']?.['db'] || 'In-memory'
-        const dbTypeInfo = dbType ? `It uses ${dbType} as the database.` : ''
+        const dbTypeInfo = dbType ? `* Use ${dbType} as the database.` : ''
         const dbInfo = config['db']?.[dbType] ? `and the information of the database is:${config['db']?.[dbType]} ;` : ''
 
         return {
-            "role": "system", "content": `You are ChatGPT, a large language model trained by OpenAI.I hope you can act as a coding expert and use ${config['basic']['language']} to develop using the following framework or library: ${JSON.stringify(config['dependencies'])}, and use ${config['basic']['arch']} pattern for project architecture.
-            ${projectType} ${typeInfo}
-            ${dbTypeInfo} ${dbInfo}
-            Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Please refrain from writing explanations or comments unless specifically instructed to do so.
+            "role": "system", "content": `You are a coding expert.You need to write code according to the following requirements.
+*. Use ${config['basic']['language']} to coding.
+*. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You should judge the functions that the project needs to use according to the library it depends on.
+*. Use ${config['basic']['arch']} pattern for project architecture.
+${projectType} ${typeInfo}
+${dbTypeInfo} ${dbInfo}
+Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Do not describe code unless specifically instructed to do so.
 `
         }//Current OS is ${osPlatform}, os version is ${osVersion}
     }
@@ -365,11 +368,11 @@ null
                 let featureFileName = path.parse(file).name//feature file name
                 let dbschemaFolder = config?.['db']?.['schemas']
                 let dbschemaPrompt = ''
-                if(dbschemaFolder){
+                if (dbschemaFolder) {
                     const dbschemaFiles = fs.readdirSync(dbschemaFolder)
-                    for(let i = 0;i< dbschemaFiles.length;i++){
-                        if(path.parse(dbschemaFiles[i]).name == featureFileName){
-                            let dbschemaContent = fs.readFileSync(path.join(dbschemaFolder,dbschemaFiles[i]), 'utf-8')
+                    for (let i = 0; i < dbschemaFiles.length; i++) {
+                        if (path.parse(dbschemaFiles[i]).name == featureFileName) {
+                            let dbschemaContent = fs.readFileSync(path.join(dbschemaFolder, dbschemaFiles[i]), 'utf-8')
                             dbschemaPrompt = `The database table structure information required for these features is as follows:
                             \`\`\`
                             ${dbschemaContent}
