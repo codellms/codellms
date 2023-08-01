@@ -90,6 +90,17 @@ Please ensure that your responses in all conversations are in the requested outp
         //}
         //return strInput
     }
+    getBlockListWithBlockName(strInput: string, blockName: string): Array<string> {
+        const regxStr = `\\[\\[${blockName}\\]\\]([\\s\\S]*?)\\[\\[\\/${blockName}\\]\\]`;
+
+        const regx = new RegExp(regxStr, 'g')
+        let matches = [];
+        let match: RegExpExecArray | null;
+        while ((match = regx.exec(strInput)) !== null) {
+            matches.push(match[1].trim());
+        }
+        return matches
+    }
     async askgpt(question: Array<any>): Promise<string | undefined> {
         let req: CreateChatCompletionRequest = {
             model: this.openaiConfig['model'],
@@ -387,29 +398,37 @@ null
                 this.log(JSON.stringify(projectFiles))
                 const content = `
                 I will provide you with the  files of the existing project (including the full path) and current feature requirements. Based on this, please tell me which files need to be created or modified.
-The provided file paths should remain consistent with the original project structure,${folderStructPrompt}ensure the consistency of code architecture design.
+The provided file paths should remain consistent with the original project structure,${folderStructPrompt} ensure the consistency of code architecture design.
 Feature Requirements:[[spec]]${spec.toString()}[[/spec]]
 Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
 ${dbschemaPrompt}
-I want you to reply the output of an js array of files inside a unique code block, and nothing else. do not write explanations. For example:
-[[code]]
-["folder/folder/file","folder/file"]
-[[/code]]
-Let's work this out in a step by step way to be sure we have the right answer.
+You just need to reply with code blocks,no need to provide explanations for your response.You response's code block don't use \`\`\` to warp, just fill in the format as shown in the example below:
+[[file]]
+Insert the file path corresponding to the code here,only one file path.                                                                                                                                                                                                                                                                         ,
+[[/file]]
+[[codeblock]]
+Insert the code corresponding to the file here
+[[/codeblock]]
+If there are more than one file, loop through the format as shown above.Let's work this out in a step by step way to be sure we have the right answer.
 `
                 const chat = {
                     "role": "user", "content": content
                 }
                 this.chats.push(chat)
                 let answer = await this.askgpt(this.chats) as string
-                answer = this.getBlockContent(answer, 'code') as string
-                const codeFiles = Array.from(JSON.parse(answer))
-                for (let i = 0; i < codeFiles.length; i++) {
-                    const f = codeFiles[i] as string
+                //rewrite logic
+                let fileList = this.getBlockListWithBlockName(answer, 'file')
+                let codeList = this.getBlockListWithBlockName(answer, 'codeblock')
+
+                //answer = this.getBlockContent(answer, 'code') as string
+                //const codeFiles = Array.from(JSON.parse(answer))
+                for (let i = 0; i < fileList.length; i++) {
+                    const f = fileList[i]
                     this.log('code file:', f)
+                    let code = codeList[i]
                     let oldCode: string | undefined
                     let modifyCodePrompt: string = ''
-                    // const childrenFiles: Array<string> | undefined = projectFiles?.[file]?.['children']
+                    // If a file exists, its contents can be extracted and provided as prompt to GPT
                     if (projectFiles !== undefined && projectFiles?.findIndex(x => x == f) > -1) {
                         // get old code file
                         oldCode = fs.readFileSync(f, 'utf-8')
@@ -422,23 +441,23 @@ ${oldCode}
 2.Add/modify the code only for new/changed requirements.
 3.The final code should be complete and runnable.
 `
-                    }
-                    lockFeatureJson['features'][file]['children'].push(f)
-                    this.chats.push({
-                        "role": "user", "content": `Q:${modifyCodePrompt}
+                        this.chats.push({
+                            "role": "user", "content": `Q:${modifyCodePrompt}
 Please provide the final code of the ${f} in the following format:
 [[code]]
 final code here
 [[/code]]
 .please provide clean, maintainable and accurate code with comments for each method.
 A:Let's work this out in a step by step way to be sure we have the right answer.Output and nothing else. Do not write explanations and comments. unless I instruct you to do so.`})
-                    const codeContent = await this.askgpt(this.chats) as string
-                    //let codeBody = this.cleanCodeBlock(codeContent)
-                    let codeBody = this.getBlockContent(codeContent, 'code')
-                    codeBody = this.cleanCodeBlock(codeBody) as string
+                        const codeContent = await this.askgpt(this.chats) as string
+                        //let codeBody = this.cleanCodeBlock(codeContent)
+                        code = this.getBlockContent(codeContent, 'code') as string
+                    }
+                    lockFeatureJson['features'][file]['children'].push(f)
                     //const filePath = f as fs.PathOrFileDescriptor
-                    this.createFile(f, codeBody!)
-                }
+                    this.createFile(f, code!)
+                }// end write respone to file
+
                 // start db migration file
                 const dbtype = config['basic']['db']
                 if (dbtype && config['db']?.['need_migration_file']) {
