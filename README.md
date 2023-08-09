@@ -1,6 +1,7 @@
 # codellms
 
 [![npm version](https://badge.fury.io/js/codellms.svg)](https://badge.fury.io/js/codellms)
+
 Use gpt to generate a complete api project, supporting multiple programme languages.
 Currently, only API type backend projects have been tested using Express in the example/todolist directory. It is not recommended for frontend projects. When GPT-4 opens up multimodal support, I believe that complete frontend and backend projects can be generated, and the frontend project can be generated based on the automatically generated API.
 
@@ -14,7 +15,7 @@ Currently, only API type backend projects have been tested using Express in the 
 * [ ] If the project is a RESTful API project, generate Swagger.
 * [x] Create different dialogue contexts based on the feature files.
 * [ ] Support using Claude API for code generation.
-* [ ] Use database structure to assist GPT in understanding entity classes.
+* [x] Use database structure to assist GPT in understanding entity classes.
 * [x] The new project supports generating DB migrate to create database structure.
 * [ ] Avoid importing different packages that provide the same functionality.
 ## Installation
@@ -48,22 +49,29 @@ Example of codellms.toml:
 express='4.18.2' # For the main framework version, such as Express or Spring Boot, do not use too new of a framework. ChatGPT does not have knowledge of the latest frameworks.
 
 [basic]
-language = "node" # Java\Go\PHP...
+language = "typescript" # Java\Go\PHP...
 arch = "mvc" # or clean architecture ...
 type="api"
 db="xxx"
 folders=["src/models", "src/controller", "src/services", "src/utils"]
 [api]
-style="restful"
+style="restful"# graphql\grpc...
 [openai]
 api_key="<your_openai_aip_key>" # Required  Or you can use the environment variable:openai_api_key
 model="gpt-3.5-turbo"
 temperature=0.5
 api_base="" # The default is https://api.openai.com/v1
 [db]
-need_migration_file=true
+need_migration_file=false
+schemas="./dbschemas"
 [db.xxx]
 uri='./db.sqlite'
+```
+To use a pre-designed database table structure to generate entity classes, you need to set the "need_migration_file" attribute of the "db" node to false, and configure the "schemas" directory for the table structure. The file naming of the table structure should match the feature file, and it is recommended to use the Markdown format. For example:
+
+```
+| name | type | default value | not null| comment |
+| title | varchar | '' | true | this is title |
 ```
 
 3. Generate your project code.

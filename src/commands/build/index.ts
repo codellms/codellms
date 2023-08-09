@@ -29,7 +29,7 @@ export default class Build extends Command {
         const config = JSON.parse(JSON.stringify(TOML.parse(configFile)))
         this.user = flags.user?.trim() || undefined
         this.log('go go go')
-        const apiKey = config['openai']?.['api_key'] || process.env['openai_api_key']
+        const apiKey = config['openai']?.['api_key']?.trim() || process.env['openai_api_key']
         const apiBase = config['openai']?.['api_base']?.trim() || process.env['openai_api_base'] || 'https://api.openai.com/v1'
         this.log('apibase:', apiBase)
         if (!apiKey) {
@@ -60,17 +60,20 @@ export default class Build extends Command {
             osVersion = exec('sw_vers -productVersion').stdout
             osPlatform = 'macOS'
         }
-        const projectType = config['basic']?.['type'] ? `This is an application of ${config['basic']['type']} type.` : ''
+        const projectType = config['basic']?.['type'] ? `*. This is an application of ${config['basic']['type']} type.` : ''
         const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${config[config['basic']?.['type']]};Build ${projectType} exactly as required` : '';
         const dbType = config['basic']?.['db'] || 'In-memory'
-        const dbTypeInfo = dbType ? `It uses ${dbType} as the database.` : ''
+        const dbTypeInfo = dbType ? `* Use ${dbType} as the database.` : ''
         const dbInfo = config['db']?.[dbType] ? `and the information of the database is:${config['db']?.[dbType]} ;` : ''
 
         return {
-            "role": "system", "content": `You are ChatGPT, a large language model trained by OpenAI.I hope you can act as a coding expert and use ${config['basic']['language']} to develop using the following framework or library: ${JSON.stringify(config['dependencies'])}, and use ${config['basic']['arch']} pattern for project architecture.
-            ${projectType} ${typeInfo}
-            ${dbTypeInfo} ${dbInfo}
-            Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Please refrain from writing explanations or comments unless specifically instructed to do so.
+            "role": "system", "content": `You are a coding expert.You need to write code according to the following requirements.
+*. Use ${config['basic']['language']} to coding.
+*. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You should judge the functions that the project needs to use according to the library it depends on.
+*. Use ${config['basic']['arch']} pattern for project architecture.
+${projectType} ${typeInfo}
+${dbTypeInfo} ${dbInfo}
+Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Do not describe code unless specifically instructed to do so.
 `
         }//Current OS is ${osPlatform}, os version is ${osVersion}
     }
@@ -86,6 +89,17 @@ export default class Build extends Command {
         return content
         //}
         //return strInput
+    }
+    getBlockListWithBlockName(strInput: string, blockName: string): Array<string> {
+        const regxStr = `\\[\\[${blockName}\\]\\]([\\s\\S]*?)\\[\\[\\/${blockName}\\]\\]`;
+
+        const regx = new RegExp(regxStr, 'g')
+        let matches = [];
+        let match: RegExpExecArray | null;
+        while ((match = regx.exec(strInput)) !== null) {
+            matches.push(match[1].trim());
+        }
+        return matches
     }
     async askgpt(question: Array<any>): Promise<string | undefined> {
         let req: CreateChatCompletionRequest = {
@@ -142,35 +156,35 @@ export default class Build extends Command {
 
     // if the codellms.lock does not exist.
     async initProject(): Promise<void> {
-        // init project
+        this.log('init project ...')
         const chat = {
             "role": "user", "content": `Please tell me what command to use to initialize this project in the current directory. Reply with the executable command that contains "yes" to automatically confirm execution without any user interaction. Please do not include any further explanation in your response.
         For example:
-        [[code]]
+        [[codeblock]]
         echo y | npm init -y && npm install express --save && npm install -g nodemon
-        [[/code]]
+        [[/codeblock]]
         Or:
-        [[code]]
+        [[codeblock]]
         npm init -y && npm install express --save  && npm install -g nodemon
-        [[/code]]` }
+        [[/codeblock]]` }
         this.chats.push(chat)
         let initCommandAnswer = await this.askgpt(this.chats)
-        initCommandAnswer = this.getBlockContent(initCommandAnswer!, 'code') as string
+        initCommandAnswer = this.getBlockContent(initCommandAnswer!, 'codeblock') as string
         await this.execCommand(initCommandAnswer)
         touch('codellms-lock.json')
         // init folder
         this.chats.push({
             "role": "user", "content": `Please tell me which folders need to be created, and return them in an array. Multi-level directories can be represented directly as "a/b/c". For example:
-[[code]]
+[[codeblock]]
 [
 "src/xxx/yyy/zzz",
 "src/abc"
 ]
-[[/code]]
+[[/codeblock]]
 .
 ` })
         let folderAnswer: string = await this.askgpt(this.chats) as string
-        folderAnswer = this.getBlockContent(folderAnswer, 'code')
+        folderAnswer = this.getBlockContent(folderAnswer, 'codeblock')
         this.log('init folders:', folderAnswer)
         Array.from(JSON.parse(folderAnswer!)).forEach(f => {
             const fd = f as fs.PathLike
@@ -231,7 +245,7 @@ export default class Build extends Command {
         const chat = { "role": "user", "content": "Based on the code you provided, please tell me the command to add dependencies and which dependencies are needed. Please provide the command directly without explanation. Here is an example of what should be returned: npm install express uuid --save or pip install a b c.Let's work this out in a step by step way to be sure we have the right answer" }
         this.chats.push(chat)
         let answer = await this.askgpt(this.chats)
-        answer = this.getBlockContent(answer!, 'code')
+        answer = this.getBlockContent(answer!, 'codeblock')
         await this.execCommand(answer)
     }
     // remove ````
@@ -258,7 +272,7 @@ export default class Build extends Command {
         let features = JSON.parse(JSON.stringify(lockFile['features'] || {}))
         let projectFiles: Array<string> = []
         for (const k in features) {
-            projectFiles = projectFiles.concat(features[k]['childrens'])
+            projectFiles = projectFiles.concat(features[k]['children'])
             // delete features[k]['integrity']
         }
         return projectFiles
@@ -271,9 +285,9 @@ export default class Build extends Command {
 [[file]]
 put the file path here
 [[/file]]
-[[code]]
+[[codeblock]]
 insert code here
-[[/code]]
+[[/codeblock]]
 `}
         const mainFilePath: string | undefined = lockFeatureJson['mainfile']?.['path']
         if (mainFilePath) {
@@ -291,25 +305,25 @@ insert code here
                 ${featureFiles}
                 [[/json]]
 The code for my entry file is as follows:
-[[code]]
+[[codeblock]]
 ${mainFileContent}
-[[/code]]
+[[/codeblock]]
 , please determine based on our previous conversation whether this file needs to be modified.
 If modification is required, please return in the following format:
-[[code]]
+[[codeblock]]
 insert code here(If no modification is necessary or if there is insufficient information to make a determination, simply return null here.)
-[[code]]
-. If no modification is necessary or if there is insufficient information to make a determination, simply return null in this [[code]] block, For example:
-[[code]]
+[[codeblock]]
+. If no modification is necessary or if there is insufficient information to make a determination, simply return null in this [[codeblock]] block, For example:
+[[codeblock]]
 null
-[[/code]]
+[[/codeblock]]
 `
             }
         }
         this.chats.push(chat)
         const answer = await this.askgpt(this.chats) as string
         const filePath = mainFilePath || this.getBlockContent(answer, 'file')?.replace("'", "")?.replace('"', '')
-        const codeBody = this.getBlockContent(answer, 'code')
+        const codeBody = this.getBlockContent(answer, 'codeblock')
         if (filePath && !!codeBody && codeBody !== "null") {
             this.createFile(filePath!, codeBody!)
 
@@ -358,67 +372,92 @@ null
                     lockFeatureJson['features'] = lockFeatureJson['features'] || {}
                     lockFeatureJson['features'][file] = {
                         integrity: specHash,
-                        childrens: []// Code files generated by gpt
+                        children: []// Code files generated by gpt
                     }// init feature file node
-                }// first feature code generated 
+                }// first feature code generated
+                // start read db schema
+                let featureFileName = path.parse(file).name//feature file name
+                let dbschemaFolder = config?.['db']?.['schemas']
+                let dbschemaPrompt = ''
+                if (dbschemaFolder) {
+                    const dbschemaFiles = fs.readdirSync(dbschemaFolder)
+                    for (let i = 0; i < dbschemaFiles.length; i++) {
+                        if (path.parse(dbschemaFiles[i]).name == featureFileName) {
+                            let dbschemaContent = fs.readFileSync(path.join(dbschemaFolder, dbschemaFiles[i]), 'utf-8')
+                            dbschemaPrompt = `The database table structure information required for these features is as follows:
+                            \`\`\`
+                            ${dbschemaContent}
+                            \`\`\`
+                            . Please generate code that meets the features based on this information.`
+                        }
+                    }
+                }
+                // end read
 
                 let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
                 this.log(JSON.stringify(projectFiles))
                 const content = `
                 I will provide you with the  files of the existing project (including the full path) and current feature requirements. Based on this, please tell me which files need to be created or modified.
-The provided file paths should remain consistent with the original project structure,${folderStructPrompt}ensure the consistency of code architecture design.
+The provided file paths should remain consistent with the original project structure,${folderStructPrompt} ensure the consistency of code architecture design.
 Feature Requirements:[[spec]]${spec.toString()}[[/spec]]
-
 Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
-
-I want you to reply the output of an js array of files inside a unique code block, and nothing else. do not write explanations. For example:
-[[code]]
-["folder/folder/file","folder/file"]
-[[/code]]
-Let's work this out in a step by step way to be sure we have the right answer.
+${dbschemaPrompt}
+You just need to reply with code blocks,no need to provide explanations for your response.You response's code block don't use \`\`\` to warp, just fill in the format as shown in the example below:
+[[file]]
+Insert the file path corresponding to the code here,only one file path.                                                                                                                                                                                                                                                                         ,
+[[/file]]
+[[codeblock]]
+Insert the complete function implementation code corresponding to the file here
+[[/codeblock]]
+If there are more than one file, loop through the format as shown above.Let's  step by step think to be sure we get correct code.
 `
                 const chat = {
                     "role": "user", "content": content
                 }
                 this.chats.push(chat)
                 let answer = await this.askgpt(this.chats) as string
-                answer = this.getBlockContent(answer, 'code') as string
-                const codeFiels = Array.from(JSON.parse(answer))
-                for (let i = 0; i < codeFiels.length; i++) {
-                    const f = codeFiels[i] as string
+                //rewrite logic
+                let fileList = this.getBlockListWithBlockName(answer, 'file')
+                let codeList = this.getBlockListWithBlockName(answer, 'codeblock')
+
+                //answer = this.getBlockContent(answer, 'codeblock') as string
+                //const codeFiles = Array.from(JSON.parse(answer))
+                for (let i = 0; i < fileList.length; i++) {
+                    const f = fileList[i]
                     this.log('code file:', f)
+                    let code = codeList[i]
                     let oldCode: string | undefined
                     let modifyCodePrompt: string = ''
-                    // const childrenFiles: Array<string> | undefined = projectFiles?.[file]?.['childrens']
+                    // If a file exists, its contents can be extracted and provided as prompt to GPT
                     if (projectFiles !== undefined && projectFiles?.findIndex(x => x == f) > -1) {
                         // get old code file
                         oldCode = fs.readFileSync(f, 'utf-8')
                         modifyCodePrompt = `The code file(${f}) provided currently exists, therefore, the existing code is provided below:
-[[code]]
+[[codeblock]]
 ${oldCode}
-[[/code]]
+[[/codeblock]]
 .Please modify the following code based on the new requirements. The modified code should:
 1.Keep the code of the existing feature.
 2.Add/modify the code only for new/changed requirements.
 3.The final code should be complete and runnable.
 `
-                    }
-                    lockFeatureJson['features'][file]['childrens'].push(f)
-                    this.chats.push({
-                        "role": "user", "content": `Q:${modifyCodePrompt}
+                        this.chats.push({
+                            "role": "user", "content": `Q:${modifyCodePrompt}
 Please provide the final code of the ${f} in the following format:
-[[code]]
+[[codeblock]]
 final code here
-[[/code]]
+[[/codeblock]]
 .please provide clean, maintainable and accurate code with comments for each method.
 A:Let's work this out in a step by step way to be sure we have the right answer.Output and nothing else. Do not write explanations and comments. unless I instruct you to do so.`})
-                    const codeContent = await this.askgpt(this.chats) as string
-                    //let codeBody = this.cleanCodeBlock(codeContent)
-                    let codeBody = this.getBlockContent(codeContent, 'code')
-                    codeBody = this.cleanCodeBlock(codeBody) as string
+                        const codeContent = await this.askgpt(this.chats) as string
+                        //let codeBody = this.cleanCodeBlock(codeContent)
+                        code = this.getBlockContent(codeContent, 'codeblock') as string
+                    }
+                    lockFeatureJson['features'][file]['children'].push(f)
                     //const filePath = f as fs.PathOrFileDescriptor
-                    this.createFile(f, codeBody!)
-                }
+                    this.createFile(f, code!)
+                }// end write respone to file
+
                 // start db migration file
                 const dbtype = config['basic']['db']
                 if (dbtype && config['db']?.['need_migration_file']) {
@@ -443,9 +482,9 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
              [[file]]
              insert db migration filen here
              [[/file]]
-             [[code]]
+             [[codeblock]]
              insert db migration content here
-             [[/code]];
+             [[/codeblock]];
              otherwise, return the null character in the following format:
              [[file]]
              null
@@ -461,7 +500,7 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
         const codeMigContent = await this.askgpt(this.chats) as string
         const migrationFile = this.getBlockContent(codeMigContent, 'file')
         if (migrationFile.trim() != 'null') {
-            const dbMigrationCode = this.getBlockContent(codeMigContent, 'code')
+            const dbMigrationCode = this.getBlockContent(codeMigContent, 'codeblock')
             this.createFile(migrationFile, dbMigrationCode)
             return migrationFile.trim()
         }
@@ -472,6 +511,7 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
         const ask = { "role": "user", "content": "Please tell me the startup (scripting language) or build (compiled language) command for this project. so that I can run it in the current directory to get a preliminary idea of whether there are any errors .This command hopes that the console will not output warning, and the information you reply will only be executable commands, without any other information. For example, return it like this: RUSTFLAGS=-Awarnings cargo build." }
         this.chats.push(ask)
         let answer = await this.askgpt(this.chats)
+        answer = this.getBlockContent(answer!,'codeblock')
         this.log('build command:', answer)
 
         let retry = 0
@@ -489,32 +529,32 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
             // ask gpt
             this.chats.push({
                 "role": "user", "content": `During program execution, the following error occurred: '${err}' .The files provided for the current project are as follows:${JSON.stringify(featureFiles)}.
-                According to the error message, please tell me the file that needs to be modified, and I will tell you its contents. If it is a brand-new file, please put the code in the [[code]] node. I will perform different operations based on whether the [[code]] node is empty. If there are multiple files to modify, only return the first file.No need to explain the modification, just provide me with the correct code.For example:
+                According to the error message, please tell me the file that needs to be modified, and I will tell you its contents. If it is a brand-new file, please put the code in the [[codeblock]] node. I will perform different operations based on whether the [[codeblock]] node is empty. If there are multiple files to modify, only return the first file.No need to explain the modification, just provide me with the correct code.For example:
 [[file]]
 insert file path here
 [[/file]]
-[[code]]
+[[codeblock]]
 insert code here(if the file exist)
-[[/code]]
+[[/codeblock]]
 `})
             let tryCorretCode = await this.askgpt(this.chats) as string
             let filePath = this.getBlockContent(tryCorretCode, 'file')
-            let maybeCorretCode = this.getBlockContent(tryCorretCode, 'code') as string
+            let maybeCorretCode = this.getBlockContent(tryCorretCode, 'codeblock') as string
             if (maybeCorretCode.startsWith('[[file]]')) {//modify
                 const codeFile = fs.readFileSync(filePath, 'utf-8')
                 this.chats.push({
                     "role": "user",
                     "content": `${filePath} file's code is:
-                    [[code]]
+                    [[codeblock]]
                     ${codeFile.toString()}
-                    [/code]
-                    .lease check the code step by step based on the error message, and then provide me with the modified code for this file:
-                    [[code]]
+                    [[/codeblock]]
+                    .Check step by step according to the error message and the code you provided, and then provide me with the correct code of this file::
+                    [[codeblock]]
                     put correct code here(The code of the entire file, not just the portion of code that was modifie)
-                    [[/code]]`
+                    [[/codeblock]]`
                 })
                 tryCorretCode = await this.askgpt(this.chats) as string
-                maybeCorretCode = this.getBlockContent(tryCorretCode, 'code') as string
+                maybeCorretCode = this.getBlockContent(tryCorretCode, 'codeblock') as string
             }
             //tryCorretCode = this.cleanCodeBlock(tryCorretCode) as string
             if (filePath) {
