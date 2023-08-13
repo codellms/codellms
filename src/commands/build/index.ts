@@ -64,16 +64,16 @@ export default class Build extends Command {
         const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${config[config['basic']?.['type']]};Build ${projectType} exactly as required` : '';
         const dbType = config['basic']?.['db'] || 'In-memory'
         const dbTypeInfo = dbType ? `* Use ${dbType} as the database.` : ''
-        const dbInfo = config['db']?.[dbType] ? `and the information of the database is:${config['db']?.[dbType]} ;` : ''
+        const dbInfo = config['db']?.[dbType] ? `and the connection information of the database is:${config['db']?.[dbType]} ;` : ''
 
         return {
-            "role": "system", "content": `You are a coding expert.You need to write code according to the following requirements.
+            "role": "system", "content": `You are a professional code generator.You need to write code according to the following requirements.
 *. Use ${config['basic']['language']} to coding.
-*. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You should judge the functions that the project needs to use according to the library it depends on.
+*. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You need to think about how to make maximum use of these dependencies in the code.
 *. Use ${config['basic']['arch']} pattern for project architecture.
 ${projectType} ${typeInfo}
 ${dbTypeInfo} ${dbInfo}
-Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Do not describe code unless specifically instructed to do so.
+Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Do not provide any explanation for the response. Do not tell me what to do.
 `
         }//Current OS is ${osPlatform}, os version is ${osVersion}
     }
@@ -102,6 +102,8 @@ Please ensure that your responses in all conversations are in the requested outp
         return matches
     }
     async askgpt(question: Array<any>): Promise<string | undefined> {
+        // this.log('chatgpt request:')
+        // this.log(JSON.stringify(question))
         let req: CreateChatCompletionRequest = {
             model: this.openaiConfig['model'],
             messages: question,
@@ -409,7 +411,8 @@ Insert the file path corresponding to the code here,only one file path.         
 [[codeblock]]
 Insert the complete function implementation code corresponding to the file here
 [[/codeblock]]
-If there are more than one file, loop through the format as shown above.Let's  step by step think to be sure we get correct code.
+If there are more than one file, loop through the format as shown above.
+Let's step by step think to be sure we get code logic corresponding to the feature requirements.
 `
                 const chat = {
                     "role": "user", "content": content
@@ -511,7 +514,7 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
         const ask = { "role": "user", "content": "Please tell me the startup (scripting language) or build (compiled language) command for this project. so that I can run it in the current directory to get a preliminary idea of whether there are any errors .This command hopes that the console will not output warning, and the information you reply will only be executable commands, without any other information. For example, return it like this: RUSTFLAGS=-Awarnings cargo build." }
         this.chats.push(ask)
         let answer = await this.askgpt(this.chats)
-        answer = this.getBlockContent(answer!,'codeblock')
+        answer = this.getBlockContent(answer!, 'codeblock')
         this.log('build command:', answer)
 
         let retry = 0
@@ -534,7 +537,7 @@ A:Let's work this out in a step by step way to be sure we have the right answer.
 insert file path here
 [[/file]]
 [[codeblock]]
-insert code here(if the file exist)
+insert code here
 [[/codeblock]]
 `})
             let tryCorretCode = await this.askgpt(this.chats) as string

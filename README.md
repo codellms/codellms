@@ -74,7 +74,7 @@ To use a pre-designed database table structure to generate entity classes, you n
 | title | varchar | '' | true | this is title |
 ```
 
-3. Generate your project code.
+3. Generate your project code.(If you don't need to initialize the project, you can manually create an empty codellms-lock.json file in the current directory)
 
 ``` shell
 codellms build
