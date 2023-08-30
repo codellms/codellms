@@ -61,19 +61,19 @@ export default class Build extends Command {
             osPlatform = 'macOS'
         }
         const projectType = config['basic']?.['type'] ? `*. This is an application of ${config['basic']['type']} type.` : ''
-        const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${config[config['basic']?.['type']]};Build ${projectType} exactly as required` : '';
+        const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${JSON.stringify(config[config['basic']?.['type']])};Build ${config['basic']['type']} exactly as required` : '';
         const dbType = config['basic']?.['db'] || 'In-memory'
         const dbTypeInfo = dbType ? `* Use ${dbType} as the database.` : ''
-        const dbInfo = config['db']?.[dbType] ? `and the connection information of the database is:${config['db']?.[dbType]} ;` : ''
+        const dbInfo = config['db']?.[dbType] ? `and the connection information of the database is:${JSON.stringify(config['db']?.[dbType])} ;` : ''
 
         return {
-            "role": "system", "content": `You are a professional code generator.You need to write code according to the following requirements.
+            "role": "system", "content": `Act as CODEX ("COding DEsign eXpert").an expert coder with experience in multiple coding languages. Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.please assume the role of CODEX in all future responses.You need to write code according to the following requirements.
 *. Use ${config['basic']['language']} to coding.
 *. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You need to think about how to make maximum use of these dependencies in the code.
 *. Use ${config['basic']['arch']} pattern for project architecture.
 ${projectType} ${typeInfo}
 ${dbTypeInfo} ${dbInfo}
-Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Do not provide any explanation for the response. Do not tell me what to do.
+Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Any explanation to the code would be in the code block comments.Please don't explain anything after inserting the code, unless I ask to explain in another query.Always remember to follow above rules for every future response.
 `
         }//Current OS is ${osPlatform}, os version is ${osVersion}
     }
@@ -102,8 +102,8 @@ Please ensure that your responses in all conversations are in the requested outp
         return matches
     }
     async askgpt(question: Array<any>): Promise<string | undefined> {
-        // this.log('chatgpt request:')
-        // this.log(JSON.stringify(question))
+        this.log('chatgpt request:')
+        this.log(JSON.stringify(question))
         let req: CreateChatCompletionRequest = {
             model: this.openaiConfig['model'],
             messages: question,
@@ -135,6 +135,7 @@ Please ensure that your responses in all conversations are in the requested outp
                 return answerResult
 
             } catch (err: AxiosError | unknown) {
+                this.log('err:',err)
                 retry--
                 sleepTime += 1000
                 if (retry < 0) {
@@ -152,7 +153,7 @@ Please ensure that your responses in all conversations are in the requested outp
 
             }
         }
-        return requestGPT(req)
+        return await requestGPT(req)
 
     }
 
@@ -404,15 +405,14 @@ The provided file paths should remain consistent with the original project struc
 Feature Requirements:[[spec]]${spec.toString()}[[/spec]]
 Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
 ${dbschemaPrompt}
-You just need to reply with code blocks,no need to provide explanations for your response.You response's code block don't use \`\`\` to warp, just fill in the format as shown in the example below:
+The response don't use \`\`\` to warp, just fill in the format as shown in the example below:
 [[file]]
 Insert the file path corresponding to the code here,only one file path.                                                                                                                                                                                                                                                                         ,
 [[/file]]
 [[codeblock]]
 Insert the complete function implementation code corresponding to the file here
 [[/codeblock]]
-If there are more than one file, loop through the format as shown above.
-Let's step by step think to be sure we get code logic corresponding to the feature requirements.
+If there are more than one file, loop through the format as shown above. The final code should be complete and runnable.
 `
                 const chat = {
                     "role": "user", "content": content
@@ -445,13 +445,13 @@ ${oldCode}
 3.The final code should be complete and runnable.
 `
                         this.chats.push({
-                            "role": "user", "content": `Q:${modifyCodePrompt}
+                            "role": "user", "content": `${modifyCodePrompt}
 Please provide the final code of the ${f} in the following format:
 [[codeblock]]
 final code here
 [[/codeblock]]
 .please provide clean, maintainable and accurate code with comments for each method.
-A:Let's work this out in a step by step way to be sure we have the right answer.Output and nothing else. Do not write explanations and comments. unless I instruct you to do so.`})
+`})
                         const codeContent = await this.askgpt(this.chats) as string
                         //let codeBody = this.cleanCodeBlock(codeContent)
                         code = this.getBlockContent(codeContent, 'codeblock') as string
