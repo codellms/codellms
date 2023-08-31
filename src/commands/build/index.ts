@@ -61,7 +61,7 @@ export default class Build extends Command {
             osPlatform = 'macOS'
         }
         const projectType = config['basic']?.['type'] ? `*. This is an application of ${config['basic']['type']} type.` : ''
-        const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${JSON.stringify(config[config['basic']?.['type']])};Build ${config['basic']['type']} exactly as required` : '';
+        const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${JSON.stringify(config[config['basic']?.['type']])};Build ${config['basic']['type']} application exactly as required` : '';
         const dbType = config['basic']?.['db'] || 'In-memory'
         const dbTypeInfo = dbType ? `* Use ${dbType} as the database.` : ''
         const dbInfo = config['db']?.[dbType] ? `and the connection information of the database is:${JSON.stringify(config['db']?.[dbType])} ;` : ''
@@ -73,7 +73,7 @@ export default class Build extends Command {
 *. Use ${config['basic']['arch']} pattern for project architecture.
 ${projectType} ${typeInfo}
 ${dbTypeInfo} ${dbInfo}
-Please ensure that your responses in all conversations are in the requested output format. Please output only in the format specified by my requirements, without including any additional information. Any explanation to the code would be in the code block comments.Please don't explain anything after inserting the code, unless I ask to explain in another query.Always remember to follow above rules for every future response.
+If your reply exceeds the word limit, I will tell you to "continue", and you need to continue to output content in the required format.Please output only in the format specified by my requirements, without including any additional information. Any explanation to the code would be in the code block comments.Please don't explain anything after inserting the code, unless I ask to explain in another query.Always remember to follow above rules for every future response.
 `
         }//Current OS is ${osPlatform}, os version is ${osVersion}
     }
@@ -102,8 +102,8 @@ Please ensure that your responses in all conversations are in the requested outp
         return matches
     }
     async askgpt(question: Array<any>): Promise<string | undefined> {
-        this.log('chatgpt request:')
-        this.log(JSON.stringify(question))
+        // this.log('chatgpt request:')
+        // this.log(JSON.stringify(question))
         let req: CreateChatCompletionRequest = {
             model: this.openaiConfig['model'],
             messages: question,
@@ -135,7 +135,6 @@ Please ensure that your responses in all conversations are in the requested outp
                 return answerResult
 
             } catch (err: AxiosError | unknown) {
-                this.log('err:',err)
                 retry--
                 sleepTime += 1000
                 if (retry < 0) {
@@ -144,10 +143,11 @@ Please ensure that your responses in all conversations are in the requested outp
                 }
 
                 if (axios.isAxiosError(err)) {
+                    this.log('err:',err.code)
                     this.log('status code:', err.response?.status, 'retrying...')
-                    if (err.response?.status !== undefined && err.response?.status >= 500) {
+                    if ((err.response?.status !== undefined && err.response?.status >= 500) || err.code === 'ETIMEOUT' || err.code === 'ECONNRESET') {
                         await sleep(sleepTime) // wait
-                        return requestGPT(req)
+                        return await requestGPT(req)
                     }
                 }
 
@@ -407,12 +407,12 @@ Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
 ${dbschemaPrompt}
 The response don't use \`\`\` to warp, just fill in the format as shown in the example below:
 [[file]]
-Insert the file path corresponding to the code here,only one file path.                                                                                                                                                                                                                                                                         ,
+Insert the file path corresponding to the code here,only one file path.
 [[/file]]
 [[codeblock]]
-Insert the complete function implementation code corresponding to the file here
+Insert the complete implementation code of the corresponding function of the file here.
 [[/codeblock]]
-If there are more than one file, loop through the format as shown above. The final code should be complete and runnable.
+If there are more than one file, loop through the format as shown above. As CODEX, you need to write high-quality, fully functional code that meets the business requirements based on the above specifications..
 `
                 const chat = {
                     "role": "user", "content": content
@@ -521,7 +521,7 @@ final code here
         // Clear context, split steps
         this.chats = []
         this.chats.push({
-            "role": "system", "content": 'You are a code expert, and you can help me solve problems in programming.'
+            "role": "system", "content": 'You are a coding expert, and you can help me solve problems in programming.'
         })
         let lockFeatureJson: { [key: string]: any } = this.getLockFile()
         let featureFiles = this.getClearFeatureFileList(lockFeatureJson)
