@@ -67,14 +67,15 @@ export default class Build extends Command {
         const dbInfo = config['db']?.[dbType] ? `and the connection information of the database is:${JSON.stringify(config['db']?.[dbType])} ;` : ''
 
         return {
-            "role": "system", "content": `Act as CODEX ("COding DEsign eXpert").an expert coder with experience in multiple coding languages. Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.please assume the role of CODEX in all future responses.You need to write code according to the following requirements.
+            "role": "system", "content": `Act as CODEX ("COding DEsign eXpert").an expert coder with experience in multiple coding languages. Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.please write code based on your understanding, not based on others' code, and ensure that the code you write has never been written before. please assume the role of CODEX in all future responses.You need to write code according to the following requirements.
 *. Use ${config['basic']['language']} to coding.
 *. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You need to think about how to make maximum use of these dependencies in the code.
 *. Use ${config['basic']['arch']} pattern for project architecture.
 ${projectType} ${typeInfo}
 ${dbTypeInfo} ${dbInfo}
-If your reply exceeds the word limit, I will tell you to "continue", and you need to continue to output content in the required format.Please output only in the format specified by my requirements, without including any additional information. Any explanation to the code would be in the code block comments.Please don't explain anything after inserting the code, unless I ask to explain in another query.Always remember to follow above rules for every future response.
+If your reply exceeds the word limit, please place -nodone- on the last line, and I will let you know to "continue." Your response should be a continuation of the previous reply without repeating any previous code. For example, if the first reply is: [[starttag]]content is here \\n -nodone-, the next reply should be: remaining content[[/endtag]].Please output only in the format specified by my requirements, without including any additional information. Any explanation to the code would be in the code block comments.Please don't explain anything after inserting the code, unless I ask to explain in another query.Always remember to follow above rules for every future response.
 `
+            // If your reply exceeds the word limit, I will tell you to "continue", and you need to continue to output content in the required format.
         }//Current OS is ${osPlatform}, os version is ${osVersion}
     }
     getBlockContent(strInput: string, blockName: string): string {
@@ -118,20 +119,53 @@ If your reply exceeds the word limit, I will tell you to "continue", and you nee
         }
         let retry = 10 // when 5xx，then retry
         let sleepTime = 0
+
         const requestGPT: (req: CreateChatCompletionRequest) => Promise<string | undefined> = async (req: CreateChatCompletionRequest): Promise<string | undefined> => {
             try {
-                const response = await this.openai.createChatCompletion(req)
-                const result = response.data.choices?.[0]
-                const answerResult: string | undefined = result?.message?.content
-                if (result?.finish_reason === 'stop' || result?.finish_reason === 'content_filter') {
-                    this.chats.push({ "role": result?.message?.role, "content": answerResult })
-                } else {
-                    this.log('gpt need continue')
-                    //this.chats.push({ "role": "user", "content": "continue"})
-                    //this.askgpt(this.chats)// continue
+                const callGpt = async (completion: CreateChatCompletionRequest) => {
+                    const response = await this.openai.createChatCompletion(req)
+                    const result = response.data.choices?.[0]
+                    const answerResult: string | undefined = result?.message?.content
+                    return answerResult
                 }
+                // const response = await this.openai.createChatCompletion(req)
+                // const result = response.data.choices?.[0]
+                let answerResult: string | undefined = await callGpt(req)
                 this.log('chatgpt response:')
                 this.log(answerResult)
+                const loopContinue = async (answerResult: string) => {
+                    let lines = answerResult?.split("\n");
+                    let lastLine = lines?.[lines?.length - 1];
+                    let trimmedLastLine = lastLine?.trim();
+
+                    if (trimmedLastLine === "-nodone-") {
+                        this.chats.push({ "role": "user", "content": "continue" })
+                        req.messages = this.chats
+                        let continueResult: string | undefined = await callGpt(req)
+                        answerResult += continueResult
+                        await loopContinue(answerResult)
+                    }
+                    return answerResult
+                }
+                // Need to continue?
+                if (answerResult != undefined) {
+                    answerResult = await loopContinue(answerResult);
+                } else {
+                    return answerResult
+                }
+                this.log('final result:', answerResult)
+                // const assistant = 'assistant'
+                this.chats.push({ "role": 'assistant', "content": answerResult })
+                // if (result?.finish_reason === 'stop' || result?.finish_reason === 'content_filter') {
+                //     this.chats.push({ "role": result?.message?.role, "content": answerResult })
+                // } else {
+                //     this.log('gpt need continue, reason:',result?.finish_reason)
+                //     // continue and merge answerResult;
+                //     //this.chats.push({ "role": "user", "content": "continue"})
+                //     //this.askgpt(this.chats)// continue
+                // }
+                // this.log('chatgpt response:')
+                // this.log(answerResult)
                 return answerResult
 
             } catch (err: AxiosError | unknown) {
@@ -143,7 +177,7 @@ If your reply exceeds the word limit, I will tell you to "continue", and you nee
                 }
 
                 if (axios.isAxiosError(err)) {
-                    this.log('err:',err.code)
+                    this.log('err:', err.code)
                     this.log('status code:', err.response?.status, 'retrying...')
                     if ((err.response?.status !== undefined && err.response?.status >= 500) || err.code === 'ETIMEOUT' || err.code === 'ECONNRESET') {
                         await sleep(sleepTime) // wait
@@ -414,7 +448,7 @@ Insert the file path corresponding to the code here,only one file path.
 [[codeblock]]
 Insert the complete implementation code of the corresponding function of the file here.
 [[/codeblock]]
-If there are more than one file, loop through the format as shown above. As CODEX, you understand that this business requirement is complex and requires careful reading of the specifications. You need to think step by step in order to write code that satisfies the various business scenarios described. Please use the provided business requirements to write high-quality, fully functional code.
+If there are more than one file, loop through the format as shown above. As CODEX, you are aware that the business requirements described in the [[spec]] node are written using a syntax similar to Gherkin. You understand that these business requirements are complex and require careful reading. You need to think step by step in order to write code that fulfills all the described business scenarios. You can identify the technical requirements and business logic specified in the requirements. Now, please provide high-quality and fully functional code, ensure that the referenced file exists or coding it.
 `
                 const chat = {
                     "role": "user", "content": content
