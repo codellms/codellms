@@ -211,6 +211,7 @@ If your reply exceeds the word limit, I will tell you to "continue", and you nee
             this.createFolder(folderArr.join('/') as fs.PathLike)
         }
         this.log('create file:', fileStr)
+        // if endsWith is not .xxx then return.
         fs.writeFileSync(fileStr as fs.PathOrFileDescriptor, content)
     }
     execCommand(command: string | undefined, cb?: { onSuccess?: Function, onError?: Function }): Promise<String> {
@@ -398,7 +399,8 @@ null
                 // end read
 
                 let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
-                this.log(JSON.stringify(projectFiles))
+                // this.log(JSON.stringify(projectFiles))
+                this.log(spec.toString())
                 const content = `
                 I will provide you with the  files of the existing project (including the full path) and current feature requirements. Based on this, please tell me which files need to be created or modified.
 The provided file paths should remain consistent with the original project structure,${folderStructPrompt} ensure the consistency of code architecture design.
@@ -412,7 +414,7 @@ Insert the file path corresponding to the code here,only one file path.
 [[codeblock]]
 Insert the complete implementation code of the corresponding function of the file here.
 [[/codeblock]]
-If there are more than one file, loop through the format as shown above. As CODEX, you need to write high-quality, fully functional code that meets the business requirements based on the above specifications..
+If there are more than one file, loop through the format as shown above. As CODEX, you understand that this business requirement is complex and requires careful reading of the specifications. You need to think step by step in order to write code that satisfies the various business scenarios described. Please use the provided business requirements to write high-quality, fully functional code.
 `
                 const chat = {
                     "role": "user", "content": content
