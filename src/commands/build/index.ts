@@ -131,29 +131,29 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
                 // const response = await this.openai.createChatCompletion(req)
                 // const result = response.data.choices?.[0]
                 let answerResult: string | undefined = await callGpt(req)
-                this.log('chatgpt response:')
-                this.log(answerResult)
+                // this.log('chatgpt response:')
+                // this.log(answerResult)
                 const loopContinue = async (answerResult: string) => {
                     let lines = answerResult?.split("\n");
                     let lastLine = lines?.[lines?.length - 1];
                     let trimmedLastLine = lastLine?.trim();
 
                     if (trimmedLastLine === "-nodone-") {
-                        this.chats.push({ "role": "user", "content": "continue" })
+                        this.log('do continue')
+                        this.chats.push({ "role": "user", "content": "continue(Remember, you are CODEX and you need to abide by the established rules)" })
                         req.messages = this.chats
                         let continueResult: string | undefined = await callGpt(req)
                         answerResult += continueResult
                         await loopContinue(answerResult)
                     }
+                    this.log('final result:', answerResult)
                     return answerResult
                 }
                 // Need to continue?
                 if (answerResult != undefined) {
                     answerResult = await loopContinue(answerResult);
-                } else {
-                    return answerResult
                 }
-                this.log('final result:', answerResult)
+
                 // const assistant = 'assistant'
                 this.chats.push({ "role": 'assistant', "content": answerResult })
                 // if (result?.finish_reason === 'stop' || result?.finish_reason === 'content_filter') {
@@ -172,8 +172,8 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
                 retry--
                 sleepTime += 1000
                 if (retry < 0) {
-                    this.log('Reached the maximum number of retries (10 times), the program stops executing')
-                    return
+                    this.error('Reached the maximum number of retries (10 times), the program stops executing')
+                    // return
                 }
 
                 if (axios.isAxiosError(err)) {
@@ -435,7 +435,8 @@ null
                 let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
                 // this.log(JSON.stringify(projectFiles))
                 this.log(spec.toString())
-                const content = `
+                const content = `Below is the prompt to be analyzed:
+                ---
                 I will provide you with the  files of the existing project (including the full path) and current feature requirements. Based on this, please tell me which files need to be created or modified.
 The provided file paths should remain consistent with the original project structure,${folderStructPrompt} ensure the consistency of code architecture design.
 Feature Requirements:[[spec]]${spec.toString()}[[/spec]]
@@ -443,35 +444,37 @@ Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
 ${dbschemaPrompt}
 The response don't use \`\`\` to warp, just fill in the format as shown in the example below:
 [[file]]
-Insert the file path corresponding to the code here,only one file path.
+{{filepath}}
 [[/file]]
 [[codeblock]]
-Insert the complete implementation code of the corresponding function of the file here.
+{{code}}
 [[/codeblock]]
-If there are more than one file, loop through the format as shown above. As CODEX, you are aware that the business requirements described in the [[spec]] node are written using a syntax similar to Gherkin. You understand that these business requirements are complex and require careful reading. You need to think step by step in order to write code that fulfills all the described business scenarios. You can identify the technical requirements and business logic specified in the requirements. Now, please provide high-quality and fully functional code, ensure that the referenced file exists or coding it.
+If there are more than one file, loop through the format as shown above. As CODEX, you are aware that the business requirements described in the [[spec]] node are written using a syntax similar to Gherkin. You understand that these business requirements are complex and require careful reading. You need to think step by step in order to write code that fulfills all the described business scenarios. You should identify the technical requirements and business logic specified in the requirements. Now, Please provide high-quality and fully functional code. Make sure to include the complete implementation for all functions, rather than just writing function names with comments describing how they should be implemented. It's important that the code includes the actual implementation details, not just high-level descriptions. This will ensure that the code is ready for execution and meets the specified requirements.Ensure that the referenced file exists or prepare to code its contents.
+---
 `
                 const chat = {
                     "role": "user", "content": content
                 }
                 this.chats.push(chat)
-                let answer = await this.askgpt(this.chats) as string
-                //rewrite logic
-                let fileList = this.getBlockListWithBlockName(answer, 'file')
-                let codeList = this.getBlockListWithBlockName(answer, 'codeblock')
+                const getCodeToFileWithGpt = async () => {
+                    let answer = await this.askgpt(this.chats) as string
+                    //rewrite logic
+                    let fileList = this.getBlockListWithBlockName(answer, 'file')
+                    let codeList = this.getBlockListWithBlockName(answer, 'codeblock')
 
-                //answer = this.getBlockContent(answer, 'codeblock') as string
-                //const codeFiles = Array.from(JSON.parse(answer))
-                for (let i = 0; i < fileList.length; i++) {
-                    const f = fileList[i]
-                    this.log('code file:', f)
-                    let code = codeList[i]
-                    let oldCode: string | undefined
-                    let modifyCodePrompt: string = ''
-                    // If a file exists, its contents can be extracted and provided as prompt to GPT
-                    if (projectFiles !== undefined && projectFiles?.findIndex(x => x == f) > -1) {
-                        // get old code file
-                        oldCode = fs.readFileSync(f, 'utf-8')
-                        modifyCodePrompt = `The code file(${f}) provided currently exists, therefore, the existing code is provided below:
+                    //answer = this.getBlockContent(answer, 'codeblock') as string
+                    //const codeFiles = Array.from(JSON.parse(answer))
+                    for (let i = 0; i < fileList.length; i++) {
+                        const f = fileList[i]
+                        this.log('code file:', f)
+                        let code = codeList[i]
+                        let oldCode: string | undefined
+                        let modifyCodePrompt: string = ''
+                        // If a file exists, its contents can be extracted and provided as prompt to GPT
+                        if (projectFiles !== undefined && projectFiles?.findIndex(x => x == f) > -1) {
+                            // get old code file
+                            oldCode = fs.readFileSync(f, 'utf-8')
+                            modifyCodePrompt = `The code file(${f}) provided currently exists, therefore, the existing code is provided below:
 [[codeblock]]
 ${oldCode}
 [[/codeblock]]
@@ -480,23 +483,29 @@ ${oldCode}
 2.Add/modify the code only for new/changed requirements.
 3.The final code should be complete and runnable.
 `
-                        this.chats.push({
-                            "role": "user", "content": `${modifyCodePrompt}
+                            this.chats.push({
+                                "role": "user", "content": `${modifyCodePrompt}
 Please provide the final code of the ${f} in the following format:
 [[codeblock]]
 final code here
 [[/codeblock]]
 .please provide clean, maintainable and accurate code with comments for each method.
 `})
-                        const codeContent = await this.askgpt(this.chats) as string
-                        //let codeBody = this.cleanCodeBlock(codeContent)
-                        code = this.getBlockContent(codeContent, 'codeblock') as string
-                    }
-                    lockFeatureJson['features'][file]['children'].push(f)
-                    //const filePath = f as fs.PathOrFileDescriptor
-                    this.createFile(f, code!)
-                }// end write respone to file
-
+                            const codeContent = await this.askgpt(this.chats) as string
+                            //let codeBody = this.cleanCodeBlock(codeContent)
+                            code = this.getBlockContent(codeContent, 'codeblock') as string
+                        }
+                        lockFeatureJson['features'][file]['children'].push(f)
+                        //const filePath = f as fs.PathOrFileDescriptor
+                        this.createFile(f, code!)
+                    }// end write respone to file
+                }
+                await getCodeToFileWithGpt()
+                this.chats.push({
+                    "role": "user", "content": `Please review the conversation to confirm if you have missed providing any files. If any files have been missed, please provide them again in the agreed format. Otherwise, please respond with the following content: null`
+                })//Ask gpt to check the provided files for omissions.
+                this.log('check!')
+                await getCodeToFileWithGpt()
                 // start db migration file
                 const dbtype = config['basic']['db']
                 if (dbtype && config['db']?.['need_migration_file']) {
