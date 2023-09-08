@@ -1,7 +1,7 @@
 {
   "name": "codellms",
   "version": "0.5.1",
-  "description": "auto create all project code use gpt.",
+  "description": "Use LLMS to automatically generate a complete application project.",
   "author": "guoxing45@gmail.com",
   "bin": {
     "codellms": "./bin/run"
