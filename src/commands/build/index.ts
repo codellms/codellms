@@ -42,7 +42,7 @@ export default class Build extends Command {
         this.openaiConfig['model'] = config['openai']?.['model'] || 'gpt-3.5-turbo'
         this.openaiConfig['temperature'] = config['openai']?.['temperature'] || '0.4'
         this.openai = new OpenAIApi(configuration);
-        this.chats.push(this.buildSystemChat(config))
+        // this.chats.push(this.buildSystemChat(config))
         //if the lock file does not exist
         if (!test('-f', './codellms-lock.json')) {
             await this.initProject()
@@ -74,14 +74,31 @@ ${dbTypeInfo} ${dbInfo}`
         ---
         I will provide you with the business requirement, which is described in the form of a BDD document, and you need to analyze it carefully.
         Feature Requirements(BDD like):[[spec]]${spec}[[/spec]]
-        You need to output two sections of content. The first section is the list of files that need to be generated, which should be output as an array. The second section is the description of these files, including the methods to be implemented, parameters, and business logic, so that developers can develop based on your output and the specific database structure. It should be output in JSON format, with the keys being the items of the first section array. These two sections should be placed within the "file" and "info" nodes, respectively, following the format below:
+        You need to output two sections of content. The first section is the list of files that need to be generated, which should be output as an array. The second section is the description of these files, which should be output in JSON format. It should include the methods to be implemented, parameters, and business logic, so that developers can develop based on your output and the specific database structure. The 'file' node should be an array, with each item representing a file path. The 'info' node should be in JSON format, where each key corresponds to a file path from the 'file' node. The corresponding value should contain the method to be implemented, its parameters, and a description of the business logic.
+        Here's the desired format:
         [[file]]
-        ['fullfilepath1', 'fullfilepath2']
+        [array of file paths]
         [[/file]]
         [[info]]
-        {{info}}
+        {
+            'file path 1': [{
+                'method': 'method name',
+                'parameters': ['parameter 1', 'parameter 2', ...],
+                'business_logic': 'business logic description'
+            }
+            ...
+            ],
+            'file path 2': [{
+            'method': 'method name',
+            'parameters': ['parameter 1', 'parameter 2', ...],
+            'business_logic': 'business logic description'
+            }
+            ...
+            ],
+            ...
+        }
         [[/info]]
-        Please start professional architecture design based on the above information, and all your output will be handed over to developers for development.
+        Please start professional architecture design based on the above information, and all your output will be handed over to developers for development.Let's think step by step.
         ---`
         return {
             "role": "user", "content": prompt
@@ -96,18 +113,18 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
             "role": "system", "content": prompt
         }
     }
-    developerToCodingPrompt(dbschema: string, designDoc: string, fileIndex: number) {
-        const fileList = this.getBlockContent(designDoc, 'file')
-        const infoObj: Map<string, any> = JSON.parse(this.getBlockContent(designDoc, 'info'))
-        const currentCodingFile: string = fileList[fileIndex]
-        const prompt = `
-        Let's implement the coding of these files:${fileList},As a CODEX, you will think step by step to implement the code. Please provide high-quality and fully functional code based on the schema documentation as well as the database structure documentation. Make sure to include complete implementations of all functions. Documentation is provided below:
-        Files to be implemented: ${currentCodingFile}
-        Architecture design documents:${infoObj.get(currentCodingFile)}
+    developerToCodingPrompt(dbschema: string | undefined, fileList: string, featureDesign: any, currentCodingFile: string) {
+        const dbPrompt = dbschema ? `
         Database schema:
         \`\`\`
         ${dbschema}
         \`\`\`
+        `: ''
+        const prompt = `
+        Let's implement the coding of these files:${fileList},As a CODEX, you will think step by step to implement the code. Please provide high-quality and fully functional code based on the architecture design documentation as well as the database structure documentation. Make sure to include complete implementations of all methods. Documentation is provided below:
+        Files to be implemented: ${currentCodingFile}
+        Architecture design documents:${featureDesign[currentCodingFile]}
+        ${dbPrompt}
         The response don't use \`\`\` to warp, just fill in the format as shown in the example below:
         [[file]]
         {{filepath}}
@@ -120,31 +137,31 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
             "role": "user", "content": prompt
         }
     }
-    buildSystemChat(config: any) {
-        let osPlatform: string = os.platform()
-        let osVersion: string = os.release()
-        if (osPlatform == 'darwin') {
-            osVersion = exec('sw_vers -productVersion').stdout
-            osPlatform = 'macOS'
-        }
-        const projectType = config['basic']?.['type'] ? `*. This is an application of ${config['basic']['type']} type.` : ''
-        const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${JSON.stringify(config[config['basic']?.['type']])};Build ${config['basic']['type']} application exactly as required` : '';
-        const dbType = config['basic']?.['db'] || 'In-memory'
-        const dbTypeInfo = dbType ? `* Use ${dbType} as the database.` : ''
-        const dbInfo = config['db']?.[dbType] ? `and the connection information of the database is:${JSON.stringify(config['db']?.[dbType])} ;` : ''
+    //     buildSystemChat(config: any) {
+    //         let osPlatform: string = os.platform()
+    //         let osVersion: string = os.release()
+    //         if (osPlatform == 'darwin') {
+    //             osVersion = exec('sw_vers -productVersion').stdout
+    //             osPlatform = 'macOS'
+    //         }
+    //         const projectType = config['basic']?.['type'] ? `*. This is an application of ${config['basic']['type']} type.` : ''
+    //         const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${JSON.stringify(config[config['basic']?.['type']])};Build ${config['basic']['type']} application exactly as required` : '';
+    //         const dbType = config['basic']?.['db'] || 'In-memory'
+    //         const dbTypeInfo = dbType ? `* Use ${dbType} as the database.` : ''
+    //         const dbInfo = config['db']?.[dbType] ? `and the connection information of the database is:${JSON.stringify(config['db']?.[dbType])} ;` : ''
 
-        return {
-            "role": "system", "content": `Act as CODEX ("COding DEsign eXpert").an expert coder with experience in multiple coding languages. Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.please write code based on your understanding, not based on others' code, and ensure that the code you write has never been written before. please assume the role of CODEX in all future responses.You need to write code according to the following requirements.
-*. Use ${config['basic']['language']} to coding.
-*. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You need to think about how to make maximum use of these dependencies in the code.
-*. Use ${config['basic']['arch']} pattern for project architecture.
-${projectType} ${typeInfo}
-${dbTypeInfo} ${dbInfo}
-If your reply exceeds the word limit, please place -nodone- on the last line, and I will let you know to "continue." Your response should be a continuation of the previous reply without repeating any previous code. For example, if the first reply is: [[starttag]]content is here \\n -nodone-, the next reply should be: remaining content[[/endtag]].Please output only in the format specified by my requirements, without including any additional information. Any explanation to the code would be in the code block comments.Please don't explain anything after inserting the code, unless I ask to explain in another query.Always remember to follow above rules for every future response.
-`
-            // If your reply exceeds the word limit, I will tell you to "continue", and you need to continue to output content in the required format.
-        }//Current OS is ${osPlatform}, os version is ${osVersion}
-    }
+    //         return {
+    //             "role": "system", "content": `Act as CODEX ("COding DEsign eXpert").an expert coder with experience in multiple coding languages. Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.please write code based on your understanding, not based on others' code, and ensure that the code you write has never been written before. please assume the role of CODEX in all future responses.You need to write code according to the following requirements.
+    // *. Use ${config['basic']['language']} to coding.
+    // *. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You need to think about how to make maximum use of these dependencies in the code.
+    // *. Use ${config['basic']['arch']} pattern for project architecture.
+    // ${projectType} ${typeInfo}
+    // ${dbTypeInfo} ${dbInfo}
+    // If your reply exceeds the word limit, please place -nodone- on the last line, and I will let you know to "continue." Your response should be a continuation of the previous reply without repeating any previous code. For example, if the first reply is: [[starttag]]content is here \\n -nodone-, the next reply should be: remaining content[[/endtag]].Please output only in the format specified by my requirements, without including any additional information. Any explanation to the code would be in the code block comments.Please don't explain anything after inserting the code, unless I ask to explain in another query.Always remember to follow above rules for every future response.
+    // `
+    //             // If your reply exceeds the word limit, I will tell you to "continue", and you need to continue to output content in the required format.
+    //         }//Current OS is ${osPlatform}, os version is ${osVersion}
+    //     }
     getBlockContent(strInput: string, blockName: string): string {
         //const regxStr = `(?<=\[\[${blockName}\]\]\n)([\s\S]*?)(?=\n\[\[\/${blockName}\]\]$)`;
         const regxStr = `(?<=\\[\\[${blockName}\\]\\]\\n)([\\s\\S]*?)(?=\\n\\[\\[\\/${blockName}\\]\\]$)`;
@@ -201,19 +218,22 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
                 // this.log('chatgpt response:')
                 // this.log(answerResult)
                 const loopContinue = async (answerResult: string) => {
-                    let lines = answerResult?.split("\n");
-                    let lastLine = lines?.[lines?.length - 1];
-                    let trimmedLastLine = lastLine?.trim();
-
+                    let lines = answerResult?.split("\n")
+                    let lastLine = lines?.[lines?.length - 1]
+                    let trimmedLastLine = lastLine?.trim()
+                    this.log(trimmedLastLine)
                     if (trimmedLastLine === "-nodone-") {
                         this.log('do continue')
-                        this.chats.push({ "role": "user", "content": "continue(Remember, you are CODEX and you need to abide by the established rules)" })
+                        this.chats.push({ "role": "user", "content": "continue" })
                         req.messages = this.chats
                         let continueResult: string | undefined = await callGpt(req)
+                        lines?.pop()
+                        answerResult = lines?.join("\n")
                         answerResult += continueResult
                         await loopContinue(answerResult)
                     }
                     this.log('final result:', answerResult)
+                    this.log('------')
                     return answerResult
                 }
                 // Need to continue?
@@ -262,7 +282,7 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
     async initProject(): Promise<void> {
         this.log('init project ...')
         const chat = {
-            "role": "user", "content": `Please tell me what command to use to initialize this project in the current directory. Reply with the executable command that contains "yes" to automatically confirm execution without any user interaction. Please do not include any further explanation in your response.
+            "role": "user", "content": `You are an expert in multiple programming languages, Please tell me what command to use to initialize this project in the current directory. Reply with the executable command that contains "yes" to automatically confirm execution without any user interaction. Please do not include any further explanation in your response.
         For example:
         [[codeblock]]
         echo y | npm init -y && npm install express --save && npm install -g nodemon
@@ -271,14 +291,18 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
         [[codeblock]]
         npm init -y && npm install express --save  && npm install -g nodemon
         [[/codeblock]]` }
-        this.chats.push(chat)
-        let initCommandAnswer = await this.askgpt(this.chats)
+        // this.chats.push(chat)
+        let initCommandAnswer = await this.askgpt([chat])
         initCommandAnswer = this.getBlockContent(initCommandAnswer!, 'codeblock') as string
         await this.execCommand(initCommandAnswer)
         touch('codellms-lock.json')
+
+
+    }
+    async initFolder(specFolderPrompt: string) {
         // init folder
         this.chats.push({
-            "role": "user", "content": `Please tell me which folders need to be created, and return them in an array. Multi-level directories can be represented directly as "a/b/c". For example:
+            "role": "user", "content": `${specFolderPrompt}Please tell me which folders need to be created, and return them in an array. Multi-level directories can be represented directly as "a/b/c". For example:
 [[codeblock]]
 [
 "src/xxx/yyy/zzz",
@@ -294,7 +318,6 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
             const fd = f as fs.PathLike
             this.createFolder(fd)
         })// init folder
-
     }
 
     createFolder(folder: fs.PathLike): void {
@@ -456,11 +479,19 @@ null
         if (folderStruct.length > 0) {
             folderStructPrompt = `Please organize your code in the following folder structure:${folderStruct}.`
         }
-        let resetIndex = this.chats.length//
+        this.chats = []
+        this.chats.push(this.buildArchitectRolePrompt(config))
+        if (!test('-f', './codellms-lock.json')) {
+            await this.initFolder(folderStructPrompt)
+        }
+
+        // let resetIndex = this.chats.length//
         for (let j = 0; j < filenames.length; j++) {
-            if (resetIndex < this.chats.length - 1) {
-                this.chats.splice(resetIndex, this.chats.length)
-            }// Each feature context starts anew.
+
+            // if (resetIndex < this.chats.length - 1) {
+            //     this.chats.splice(resetIndex, this.chats.length)
+            // }// Each feature context starts anew.
+
             const file = filenames[j]
             if (path.extname(file) === '.feature') {
                 let lockFeatureJson: { [key: string]: any } = this.getLockFile();
@@ -483,97 +514,91 @@ null
                 // start read db schema
                 let featureFileName = path.parse(file).name//feature file name
                 let dbschemaFolder = config?.['db']?.['schemas']
-                let dbschemaPrompt = ''
+                // let dbschemaPrompt = ''
+                let dbschemaContent
                 if (dbschemaFolder) {
                     const dbschemaFiles = fs.readdirSync(dbschemaFolder)
                     for (let i = 0; i < dbschemaFiles.length; i++) {
                         if (path.parse(dbschemaFiles[i]).name == featureFileName) {
-                            let dbschemaContent = fs.readFileSync(path.join(dbschemaFolder, dbschemaFiles[i]), 'utf-8')
-                            dbschemaPrompt = `The database table structure information as follows:
-                            \`\`\`
-                            ${dbschemaContent}
-                            \`\`\`
-                            . `
+                            dbschemaContent = fs.readFileSync(path.join(dbschemaFolder, dbschemaFiles[i]), 'utf-8')
+                            // dbschemaPrompt = `The database table structure information as follows:
+                            // \`\`\`
+                            // ${dbschemaContent}
+                            // \`\`\`
+                            // . `
                         }
                     }
                 }
                 // end read
+                //refactor role prompt
+                this.chats.push(this.architectToDesignFeaturePrompt(spec))
+                const architectDocAnswer = await this.askgpt(this.chats)
 
-                let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
-                // this.log(JSON.stringify(projectFiles))
-                this.log(spec.toString())
-                const content = `Below is the prompt to be analyzed:
-                ---
-                I will provide you with the  files of the existing project (including the full path) and current feature requirements. Based on this, please tell me which files need to be created or modified.
-The provided file paths should remain consistent with the original project structure,${folderStructPrompt} ensure the consistency of code architecture design.
-Feature Requirements:[[spec]]${spec.toString()}[[/spec]]
-Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
-${dbschemaPrompt}
-The response don't use \`\`\` to warp, just fill in the format as shown in the example below:
-[[file]]
-{{filepath}}
-[[/file]]
-[[codeblock]]
-{{code}}
-[[/codeblock]]
-If there are more than one file, loop through the format as shown above. As CODEX, you are aware that the business requirements described in the [[spec]] node are written using a syntax similar to Gherkin. You understand that these business requirements are complex and require careful reading. You need to think step by step in order to write code that fulfills all the described business scenarios. You should identify the technical requirements and business logic specified in the requirements. Now, Please provide high-quality and fully functional code. Make sure to include the complete implementation for all functions, rather than just writing function names with comments describing how they should be implemented. It's important that the code includes the actual implementation details, not just high-level descriptions. This will ensure that the code is ready for execution and meets the specified requirements.Ensure that the referenced file exists or prepare to code its contents.
----
-`
-                const chat = {
-                    "role": "user", "content": content
-                }
-                this.chats.push(chat)
-                const getCodeToFileWithGpt = async () => {
-                    let answer = await this.askgpt(this.chats) as string
-                    //rewrite logic
-                    let fileList = this.getBlockListWithBlockName(answer, 'file')
-                    let codeList = this.getBlockListWithBlockName(answer, 'codeblock')
+                this.chats = []
+                this.chats.push(this.buildDeveloperRolePrompt())
+                const codefileStr = this.getBlockContent(architectDocAnswer!, 'file')
+                const codefileArr: [string] = JSON.parse(codefileStr)
 
-                    //answer = this.getBlockContent(answer, 'codeblock') as string
-                    //const codeFiles = Array.from(JSON.parse(answer))
-                    for (let i = 0; i < fileList.length; i++) {
-                        const f = fileList[i]
-                        this.log('code file:', f)
-                        let code = codeList[i]
-                        let oldCode: string | undefined
-                        let modifyCodePrompt: string = ''
-                        // If a file exists, its contents can be extracted and provided as prompt to GPT
-                        if (projectFiles !== undefined && projectFiles?.findIndex(x => x == f) > -1) {
-                            // get old code file
-                            oldCode = fs.readFileSync(f, 'utf-8')
-                            modifyCodePrompt = `The code file(${f}) provided currently exists, therefore, the existing code is provided below:
-[[codeblock]]
-${oldCode}
-[[/codeblock]]
-.Please modify the following code based on the new requirements. The modified code should:
-1.Keep the code of the existing feature.
-2.Add/modify the code only for new/changed requirements.
-3.The final code should be complete and runnable.
-`
-                            this.chats.push({
-                                "role": "user", "content": `${modifyCodePrompt}
-Please provide the final code of the ${f} in the following format:
-[[codeblock]]
-final code here
-[[/codeblock]]
-.please provide clean, maintainable and accurate code with comments for each method.
-`})
-                            const codeContent = await this.askgpt(this.chats) as string
-                            //let codeBody = this.cleanCodeBlock(codeContent)
-                            code = this.getBlockContent(codeContent, 'codeblock') as string
+                const infoObj = JSON.parse(this.getBlockContent(architectDocAnswer!, 'info'))
+                // Code files requested by Loop Architect
+                if (codefileArr instanceof Array) {
+                    let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
+                    for (let fIndex = 0; fIndex < codefileArr.length; fIndex++) {
+                        const codefileName = codefileArr[fIndex]
+                        const designDoc = infoObj[codefileName]
+                        if(!designDoc || !codefileName){
+                            continue
                         }
-                        lockFeatureJson['features'][file]['children'].push(f)
-                        //const filePath = f as fs.PathOrFileDescriptor
-                        this.createFile(f, code!)
-                    }// end write respone to file
+                        this.log('descgndoc type:', typeof designDoc)
+                        this.chats.push(this.developerToCodingPrompt(dbschemaContent, codefileStr, designDoc, codefileName))
+                        const getCodeToFileWithGpt = async () => {
+                            const answer = await this.askgpt(this.chats) as string
+                            // let fileList = this.getBlockContent(answer, 'file')
+                            let code = this.getBlockContent(answer, 'codeblock')
+                            // for (let i = 0; i < fileList.length; i++) {
+                            // const f = fileList[i]
+                            this.log('code file:', codefileName)
+                            // let code = codeList[i]
+                            let oldCode: string | undefined
+                            let modifyCodePrompt: string = ''
+                            // If a file exists, its contents can be extracted and provided as prompt to GPT
+                            if (projectFiles !== undefined && projectFiles?.findIndex(x => x == codefileName) > -1) {
+                                // get old code file
+                                oldCode = fs.readFileSync(codefileName, 'utf-8')
+                                modifyCodePrompt = `The code file(${codefileName}) provided currently exists, therefore, the existing code is provided below:
+        [[codeblock]]
+        ${oldCode}
+        [[/codeblock]]
+        .Please modify the following code based on the new requirements. The modified code should:
+        1.Keep the code of the existing feature.
+        2.Add/modify the code only for new/changed requirements.
+        3.The final code should be complete and runnable.
+        `
+                                this.chats.push({
+                                    "role": "user", "content": `${modifyCodePrompt}
+        Please provide the final code of the ${codefileName} in the following format:
+        [[codeblock]]
+        final code here
+        [[/codeblock]]
+        .please provide clean, maintainable and accurate code with comments for each method.
+        `})
+                                const codeContent = await this.askgpt(this.chats) as string
+                                //let codeBody = this.cleanCodeBlock(codeContent)
+                                code = this.getBlockContent(codeContent, 'codeblock') as string
+                            }
+                            lockFeatureJson['features'][file]['children'].push(codefileName)
+                            //const filePath = f as fs.PathOrFileDescriptor
+                            this.createFile(codefileName, code!)
+                        }
+                        await getCodeToFileWithGpt()
+                        // this.chats.push({
+                        //     "role": "user", "content": `Please review the conversation to confirm if you have missed providing any files. If any files have been missed, please provide them again in the agreed format. Otherwise, please respond with the following content: null`
+                        // })//Ask gpt to check the provided files for omissions.
+                        // this.log('check!')
+                        // await getCodeToFileWithGpt()
+                    }
+
                 }
-                await getCodeToFileWithGpt()
-                this.chats.push({
-                    "role": "user", "content": `Please review the conversation to confirm if you have missed providing any files. If any files have been missed, please provide them again in the agreed format. Otherwise, please respond with the following content: null`
-                })//Ask gpt to check the provided files for omissions.
-                this.log('check!')
-                await getCodeToFileWithGpt()
-                // start db migration file
                 const dbtype = config['basic']['db']
                 if (dbtype && config['db']?.['need_migration_file']) {
                     lockFeatureJson['migration'] = lockFeatureJson['migration'] || []
@@ -585,10 +610,96 @@ final code here
                 this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
                 await this.createMainfile(config)// updagte main file
             }
+            //         fileIndex: number
+            // const fileList = this.getBlockContent(designDoc, 'file')
+            // const infoObj: Map<string, any> = JSON.parse(this.getBlockContent(designDoc, 'info'))
+            // const currentCodingFile: string = fileList[fileIndex]
+
+            // this.chats.push(this.developerToCodingPrompt(dbschemaContent, codefileStr, architectDocAnswer,))
+            //refactor role prompt end
+
+            // old 
+            //                 let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
+            //                 this.log(spec.toString())
+            //                 const content = `Below is the prompt to be analyzed:
+            //                 ---
+            //                 I will provide you with the  files of the existing project (including the full path) and current feature requirements. Based on this, please tell me which files need to be created or modified.
+            // The provided file paths should remain consistent with the original project structure,${folderStructPrompt} ensure the consistency of code architecture design.
+            // Feature Requirements:[[spec]]${spec.toString()}[[/spec]]
+            // Existing project files:[[json]]${JSON.stringify(projectFiles)}[[/json]]
+            // ${dbschemaPrompt}
+            // The response don't use \`\`\` to warp, just fill in the format as shown in the example below:
+            // [[file]]
+            // {{filepath}}
+            // [[/file]]
+            // [[codeblock]]
+            // {{code}}
+            // [[/codeblock]]
+            // If there are more than one file, loop through the format as shown above. As CODEX, you are aware that the business requirements described in the [[spec]] node are written using a syntax similar to Gherkin. You understand that these business requirements are complex and require careful reading. You need to think step by step in order to write code that fulfills all the described business scenarios. You should identify the technical requirements and business logic specified in the requirements. Now, Please provide high-quality and fully functional code. Make sure to include the complete implementation for all functions, rather than just writing function names with comments describing how they should be implemented. It's important that the code includes the actual implementation details, not just high-level descriptions. This will ensure that the code is ready for execution and meets the specified requirements.Ensure that the referenced file exists or prepare to code its contents.
+            // ---
+            // `
+            //                 const chat = {
+            //                     "role": "user", "content": content
+            //                 }
+            //                 this.chats.push(chat)
+            // old end
+            //                 const getCodeToFileWithGpt = async () => {
+            //                     let answer = await this.askgpt(this.chats) as string
+            //                     //rewrite logic
+            //                     let fileList = this.getBlockListWithBlockName(answer, 'file')
+            //                     let codeList = this.getBlockListWithBlockName(answer, 'codeblock')
+
+            //                     //answer = this.getBlockContent(answer, 'codeblock') as string
+            //                     //const codeFiles = Array.from(JSON.parse(answer))
+            //                     for (let i = 0; i < fileList.length; i++) {
+            //                         const f = fileList[i]
+            //                         this.log('code file:', f)
+            //                         let code = codeList[i]
+            //                         let oldCode: string | undefined
+            //                         let modifyCodePrompt: string = ''
+            //                         // If a file exists, its contents can be extracted and provided as prompt to GPT
+            //                         if (projectFiles !== undefined && projectFiles?.findIndex(x => x == f) > -1) {
+            //                             // get old code file
+            //                             oldCode = fs.readFileSync(f, 'utf-8')
+            //                             modifyCodePrompt = `The code file(${f}) provided currently exists, therefore, the existing code is provided below:
+            // [[codeblock]]
+            // ${oldCode}
+            // [[/codeblock]]
+            // .Please modify the following code based on the new requirements. The modified code should:
+            // 1.Keep the code of the existing feature.
+            // 2.Add/modify the code only for new/changed requirements.
+            // 3.The final code should be complete and runnable.
+            // `
+            //                             this.chats.push({
+            //                                 "role": "user", "content": `${modifyCodePrompt}
+            // Please provide the final code of the ${f} in the following format:
+            // [[codeblock]]
+            // final code here
+            // [[/codeblock]]
+            // .please provide clean, maintainable and accurate code with comments for each method.
+            // `})
+            //                             const codeContent = await this.askgpt(this.chats) as string
+            //                             //let codeBody = this.cleanCodeBlock(codeContent)
+            //                             code = this.getBlockContent(codeContent, 'codeblock') as string
+            //                         }
+            //                         lockFeatureJson['features'][file]['children'].push(f)
+            //                         //const filePath = f as fs.PathOrFileDescriptor
+            //                         this.createFile(f, code!)
+            //                     }// end write respone to file
+            //                 }
+            // await getCodeToFileWithGpt()
+            // this.chats.push({
+            //     "role": "user", "content": `Please review the conversation to confirm if you have missed providing any files. If any files have been missed, please provide them again in the agreed format. Otherwise, please respond with the following content: null`
+            // })//Ask gpt to check the provided files for omissions.
+            // this.log('check!')
+            // await getCodeToFileWithGpt()
+            // start db migration file
+
         }
-        // this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
-        // build project , tell project index to gpt if has error
     }
+    // this.createFile('codellms-lock.json', JSON.stringify(lockFeatureJson))
+    // build project , tell project index to gpt if has error
+    // }
     async createDbMigragitonFile(existDbMigFiles: Array<string>): Promise<string | null> {
         const migFilesPrompt = existDbMigFiles.length > 0 ? `Please refer to the existing database migration files to name this file:${existDbMigFiles};` : 'Does not currently exist migration file.'
         this.chats.push({
