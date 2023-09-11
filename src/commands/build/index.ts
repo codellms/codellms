@@ -72,14 +72,17 @@ ${dbTypeInfo} ${dbInfo}`
         const prompt = `
         Below is the prompt to be analyzed:
         ---
-        I will provide you with the business requirement, which is described in the form of a BDD document, and you need to analyze it carefully.
+        I will provide you with business requirements, described in the form of a BDD document. You need to analyze it carefully, without missing any user stories or user cases..
         Feature Requirements(BDD like):[[spec]]${spec}[[/spec]]
         You need to output two sections of content. The first section is the list of files that need to be generated, which should be output as an array. The second section is the description of these files, which should be output in JSON format. It should include the methods to be implemented, parameters, and business logic, so that developers can develop based on your output and the specific database structure. The 'file' node should be an array, with each item representing a file path. The 'info' node should be in JSON format, where each key corresponds to a file path from the 'file' node. The corresponding value should contain the method to be implemented, its parameters, and a description of the business logic.
         Here's the desired format:
         [[file]]
-        [array of file paths]
+        // List of file paths as JSON array
         [[/file]]
         [[info]]
+        // Information for each file as JSON object
+        // Key is file path, value is methods info for that file
+        // Method info includes method, parameters and business_logic
         {
             'file path 1': [{
                 'method': 'method name',
@@ -98,7 +101,7 @@ ${dbTypeInfo} ${dbInfo}`
             ...
         }
         [[/info]]
-        Please start professional architecture design based on the above information, and all your output will be handed over to developers for development.Let's think step by step.
+        Please start professional architecture design based on the above information, and all your output will be handed over to developers for development.Make sure your answers are returned in the format required above.Let's think step by step.
         ---`
         return {
             "role": "user", "content": prompt
@@ -106,7 +109,7 @@ ${dbTypeInfo} ${dbInfo}`
     }
     buildDeveloperRolePrompt() {
         const prompt = `
-        Act as CODEX ("COding DEsign eXpert").an expert coder with experience in multiple coding languages. Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.please write code based on your understanding, not based on others' code, and ensure that the code you write has never been written before. please assume the role of CODEX in all future responses.You need to write code according to the provided architect's documentation and database structure.
+        Act as CODEX ("COding DEsign eXpert").an expert coder with experience in multiple coding languages. Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.please write code based on your understanding, not based on others' code, and ensure that the code you write has never been written before. Do not use non-existent technologies or methods.please assume the role of CODEX in all future responses.You need to write code according to the provided architect's documentation and database structure.
 If your reply exceeds the word limit, please place -nodone- on the last line, and I will let you know to "continue." Your response should be a continuation of the previous reply without repeating any previous code. For example, if the first reply is: [[starttag]]content is here \\n -nodone-, the next reply should be: remaining content[[/endtag]].Please output only in the format specified by my requirements, without including any additional information. Any explanation to the code would be in the code block comments.Please don't explain anything after inserting the code, unless I ask to explain in another query.Always remember to follow above rules for every future response.
 `
         return {
@@ -121,7 +124,7 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
         \`\`\`
         `: ''
         const prompt = `
-        Let's implement the coding of these files:${fileList},As a CODEX, you will think step by step to implement the code. Please provide high-quality and fully functional code based on the architecture design documentation as well as the database structure documentation. Make sure to include complete implementations of all methods. Documentation is provided below:
+        Let's implement the coding of these files:${fileList},As a CODEX, you will think step by step to implement the code. Please provide high-quality code based on the architecture design document and the database structure document. Ensure the implementation of all methods and business logic required in the architecture design document. Ensure that the technologies and functions used in the written code actually exist.Documentation is provided below:
         Files to be implemented: ${currentCodingFile}
         Architecture design documents:${featureDesign[currentCodingFile]}
         ${dbPrompt}
@@ -515,18 +518,22 @@ null
                 let featureFileName = path.parse(file).name//feature file name
                 let dbschemaFolder = config?.['db']?.['schemas']
                 // let dbschemaPrompt = ''
-                let dbschemaContent
+                let dbschemaContent = ''
                 if (dbschemaFolder) {
                     const dbschemaFiles = fs.readdirSync(dbschemaFolder)
                     for (let i = 0; i < dbschemaFiles.length; i++) {
-                        if (path.parse(dbschemaFiles[i]).name == featureFileName) {
-                            dbschemaContent = fs.readFileSync(path.join(dbschemaFolder, dbschemaFiles[i]), 'utf-8')
-                            // dbschemaPrompt = `The database table structure information as follows:
-                            // \`\`\`
-                            // ${dbschemaContent}
-                            // \`\`\`
-                            // . `
-                        }
+                        // load all db schema
+                        dbschemaContent += fs.readFileSync(path.join(dbschemaFolder, dbschemaFiles[i]), 'utf-8')
+                        dbschemaContent += "\n"
+                        // if (path.parse(dbschemaFiles[i]).name == featureFileName) {
+                        //     dbschemaContent += fs.readFileSync(path.join(dbschemaFolder, dbschemaFiles[i]), 'utf-8')
+                        //     dbschemaContent += "\n"
+                        //     // dbschemaPrompt = `The database table structure information as follows:
+                        //     // \`\`\`
+                        //     // ${dbschemaContent}
+                        //     // \`\`\`
+                        //     // . `
+                        // }
                     }
                 }
                 // end read
