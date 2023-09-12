@@ -12,6 +12,7 @@ import { Configuration, OpenAIApi, CreateChatCompletionRequest } from 'openai'
 import { stderr } from 'process'
 import { createHash } from 'node:crypto'
 import axios, { AxiosError } from 'axios'
+import { string } from '@oclif/core/lib/flags'
 //let chats = []
 export default class Build extends Command {
     static flags = {
@@ -75,26 +76,31 @@ ${dbTypeInfo} ${dbInfo}`
         I will provide you with business requirements, described in the form of a BDD document. You need to analyze it carefully, without missing any user stories or user cases..
         Feature Requirements(BDD like):[[spec]]${spec}[[/spec]]
         You need to output two sections of content. The first section is the list of files that need to be generated, which should be output as an array. The second section is the description of these files, which should be output in JSON format. It should include the methods to be implemented, parameters, and business logic, so that developers can develop based on your output and the specific database structure. The 'file' node should be an array, with each item representing a file path. The 'info' node should be in JSON format, where each key corresponds to a file path from the 'file' node. The corresponding value should contain the method to be implemented, its parameters, and a description of the business logic.
+        It is important to use double quotation marks to wrap strings instead of single quotation marks.
         Here's the desired format:
         [[file]]
-        // List of file paths as JSON array
+        // List of file paths (starting from the project root,example: src/<Folders defined based on architecture>/filename) as a Javascript array
+        ["file path1","file path2"...]
         [[/file]]
         [[info]]
         // Information for each file as JSON object
         // Key is file path, value is methods info for that file
-        // Method info includes method, parameters and business_logic
+        // Method info includes method, parameters, result,and business_logic
+        // 
         {
-            'file path 1': [{
-                'method': 'method name',
-                'parameters': ['parameter 1', 'parameter 2', ...],
-                'business_logic': 'business logic description'
+            "file path 1": [{
+                "method": "method name",
+                "parameters": ["parameter 1", "parameter 2", ...],
+                "business_logic": "business logic description",
+                "result": "What result does the method return?"
             }
             ...
             ],
-            'file path 2': [{
-            'method': 'method name',
-            'parameters': ['parameter 1', 'parameter 2', ...],
-            'business_logic': 'business logic description'
+            "file path 2": [{
+            "method": "method name",
+            "parameters": ["parameter 1", "parameter 2", ...],
+            "business_logic": "business logic description",
+            "result": "What result does the method return?"
             }
             ...
             ],
@@ -116,7 +122,8 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
             "role": "system", "content": prompt
         }
     }
-    developerToCodingPrompt(dbschema: string | undefined, fileList: string, featureDesign: any, currentCodingFile: string) {
+    developerToCodingPrompt(dbschema: string | undefined, fileList: string, featureDesign: Array<JSON>, currentCodingFile: string) {
+        let methods = featureDesign.map((item: any) => item['method']);
         const dbPrompt = dbschema ? `
         Database schema:
         \`\`\`
@@ -124,9 +131,8 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
         \`\`\`
         `: ''
         const prompt = `
-        Let's implement the coding of these files:${fileList},As a CODEX, you will think step by step to implement the code. Please provide high-quality code based on the architecture design document and the database structure document. Ensure the implementation of all methods and business logic required in the architecture design document. Ensure that the technologies and functions used in the written code actually exist.Documentation is provided below:
-        Files to be implemented: ${currentCodingFile}
-        Architecture design documents:${featureDesign[currentCodingFile]}
+        Let's implement the coding of these files:${fileList},Now, write the code for ${currentCodingFile}.As a CODEX, you will think step by step to implement the code. Please provide high-quality code based on the architecture design document and the database structure document. Ensure the implementation of all methods and business logic required in the architecture design document. Ensure that the technologies and functions used in the written code actually exist.Documentation is provided below:
+        The ${currentCodingFile} comparison involves the following methods: ${methods}. Here is the corresponding information for these methods: ${featureDesign}.ou need to write your code according to the requirements of parameters, business logic, and result.
         ${dbPrompt}
         The response don't use \`\`\` to warp, just fill in the format as shown in the example below:
         [[file]]
@@ -235,8 +241,8 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
                         answerResult += continueResult
                         await loopContinue(answerResult)
                     }
-                    this.log('final result:', answerResult)
-                    this.log('------')
+                    // this.log('final result:', answerResult)
+                    // this.log('------')
                     return answerResult
                 }
                 // Need to continue?
@@ -267,9 +273,10 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
                 }
 
                 if (axios.isAxiosError(err)) {
-                    this.log('err:', err.code)
-                    this.log('status code:', err.response?.status, 'retrying...')
-                    if ((err.response?.status !== undefined && err.response?.status >= 500) || err.code === 'ETIMEOUT' || err.code === 'ECONNRESET') {
+                    // this.log('err:', err.code)
+                    this.log('err info:', err.response?.data?.error)
+                    this.log('status code:',err.code|| err.response?.status, 'retrying...')
+                    if ((err.response?.status !== undefined && err.response?.status >= 400) || err.code === 'ETIMEOUT' || err.code === 'ECONNRESET') {
                         await sleep(sleepTime) // wait
                         return await requestGPT(req)
                     }
@@ -515,7 +522,7 @@ null
                     }// init feature file node
                 }// first feature code generated
                 // start read db schema
-                let featureFileName = path.parse(file).name//feature file name
+                // let featureFileName = path.parse(file).name//feature file name
                 let dbschemaFolder = config?.['db']?.['schemas']
                 // let dbschemaPrompt = ''
                 let dbschemaContent = ''
@@ -545,18 +552,18 @@ null
                 this.chats.push(this.buildDeveloperRolePrompt())
                 const codefileStr = this.getBlockContent(architectDocAnswer!, 'file')
                 const codefileArr: [string] = JSON.parse(codefileStr)
-
+                this.log('codefiles:', codefileArr)
                 const infoObj = JSON.parse(this.getBlockContent(architectDocAnswer!, 'info'))
+                this.log('codebodydesign:', infoObj)
                 // Code files requested by Loop Architect
                 if (codefileArr instanceof Array) {
                     let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
                     for (let fIndex = 0; fIndex < codefileArr.length; fIndex++) {
                         const codefileName = codefileArr[fIndex]
                         const designDoc = infoObj[codefileName]
-                        if(!designDoc || !codefileName){
+                        if (!designDoc || !codefileName) {
                             continue
                         }
-                        this.log('descgndoc type:', typeof designDoc)
                         this.chats.push(this.developerToCodingPrompt(dbschemaContent, codefileStr, designDoc, codefileName))
                         const getCodeToFileWithGpt = async () => {
                             const answer = await this.askgpt(this.chats) as string
@@ -598,6 +605,10 @@ null
                             this.createFile(codefileName, code!)
                         }
                         await getCodeToFileWithGpt()
+                        if(this.chats.length>2){
+                            this.chats.splice(-2)
+                        }//remove last q&a,save tokens.
+                        
                         // this.chats.push({
                         //     "role": "user", "content": `Please review the conversation to confirm if you have missed providing any files. If any files have been missed, please provide them again in the agreed format. Otherwise, please respond with the following content: null`
                         // })//Ask gpt to check the provided files for omissions.
