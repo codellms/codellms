@@ -107,7 +107,7 @@ ${dbTypeInfo} ${dbInfo}`
             ...
         }
         [[/info]]
-        Please start professional architecture design based on the above information, and all your output will be handed over to developers for development.Make sure your answers are returned in the format required above.Let's think step by step.
+        Please start professional architecture design based on the above information, and all your output will be handed over to developers for development.Make sure your answers are returned in the format required above,and maintain architectural design consistency.Let's think step by step.
         ---`
         return {
             "role": "user", "content": prompt
@@ -275,7 +275,7 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
                 if (axios.isAxiosError(err)) {
                     // this.log('err:', err.code)
                     this.log('err info:', err.response?.data?.error)
-                    this.log('status code:',err.code|| err.response?.status, 'retrying...')
+                    this.log('status code:', err.code || err.response?.status, 'retrying...')
                     if ((err.response?.status !== undefined && err.response?.status >= 400) || err.code === 'ETIMEOUT' || err.code === 'ECONNRESET') {
                         await sleep(sleepTime) // wait
                         return await requestGPT(req)
@@ -489,12 +489,14 @@ null
         if (folderStruct.length > 0) {
             folderStructPrompt = `Please organize your code in the following folder structure:${folderStruct}.`
         }
-        this.chats = []
-        this.chats.push(this.buildArchitectRolePrompt(config))
+
+
         if (!test('-f', './codellms-lock.json')) {
+            this.chats = []
+            this.chats.push(this.buildArchitectRolePrompt(config))
             await this.initFolder(folderStructPrompt)
         }
-
+        let architectChats: Array<any> = []//Save the architectural design of the conversation to ensure consistent style
         // let resetIndex = this.chats.length//
         for (let j = 0; j < filenames.length; j++) {
 
@@ -545,10 +547,16 @@ null
                 }
                 // end read
                 //refactor role prompt
+                this.chats = []//Switch to architect roles
+
+                this.chats.push(this.buildArchitectRolePrompt(config))
+                if (architectChats.length > 0) {
+                    this.chats.concat(architectChats)
+                }
                 this.chats.push(this.architectToDesignFeaturePrompt(spec))
                 const architectDocAnswer = await this.askgpt(this.chats)
-
-                this.chats = []
+                architectChats.concat(this.chats.splice(0, 1))//remove system chat
+                this.chats = []//Switch to developer roles
                 this.chats.push(this.buildDeveloperRolePrompt())
                 const codefileStr = this.getBlockContent(architectDocAnswer!, 'file')
                 const codefileArr: [string] = JSON.parse(codefileStr)
@@ -605,10 +613,10 @@ null
                             this.createFile(codefileName, code!)
                         }
                         await getCodeToFileWithGpt()
-                        if(this.chats.length>2){
+                        if (this.chats.length > 2) {
                             this.chats.splice(-2)
                         }//remove last q&a,save tokens.
-                        
+
                         // this.chats.push({
                         //     "role": "user", "content": `Please review the conversation to confirm if you have missed providing any files. If any files have been missed, please provide them again in the agreed format. Otherwise, please respond with the following content: null`
                         // })//Ask gpt to check the provided files for omissions.
