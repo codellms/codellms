@@ -53,18 +53,22 @@ export default class Build extends Command {
         await this.installDependencies()
         await this.tryBuildOrStart(config['basic']?.['debug_retry'] || 3)// debug with unitest,build...
     }
-    buildArchitectRolePrompt(config: any) {
+    buildProjectBasicInfo(config: any): string {
         const projectType = config['basic']?.['type'] ? `*. This is an application of ${config['basic']['type']} type.` : ''
         const typeInfo = config[config['basic']?.['type']] ? `and its requirements are as follows:${JSON.stringify(config[config['basic']?.['type']])};` : '';
         const dbType = config['basic']?.['db'] || 'In-memory'
         const dbTypeInfo = dbType ? `*. Use ${dbType} as the database.` : ''
         const dbInfo = config['db']?.[dbType] ? `and the connection information of the database is:${JSON.stringify(config['db']?.[dbType])} ;` : ''
+        return `*. Use ${config['basic']['language']} to coding.
+        *. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You need to think about how to make maximum use of these dependencies in the code.
+        *. Use ${config['basic']['arch']} pattern for project architecture.
+        ${projectType} ${typeInfo}
+        ${dbTypeInfo} ${dbInfo}`
+    }
+    buildArchitectRolePrompt(projectBasicInfo: string) {
+
         const prompt = `You are a professional application architect. Based on the provided technical information, databases info, and business requirements, you need to think step by step and make technology selections and code designs that adhere to best practices. You should not use non-existent third-party libraries, and your architectural design will be given to developers for implementation. Please ensure that developers can understand your requirements. The following are the basic project requirements:
-*. Use ${config['basic']['language']} to coding.
-*. Using the following framework or library: ${JSON.stringify(config['dependencies'])}, You need to think about how to make maximum use of these dependencies in the code.
-*. Use ${config['basic']['arch']} pattern for project architecture.
-${projectType} ${typeInfo}
-${dbTypeInfo} ${dbInfo}`
+        ${projectBasicInfo}`
         return {
             "role": "system", "content": prompt
         }
@@ -113,9 +117,11 @@ ${dbTypeInfo} ${dbInfo}`
             "role": "user", "content": prompt
         }
     }
-    buildDeveloperRolePrompt() {
+    buildDeveloperRolePrompt(projectBasicInfo: string) {
         const prompt = `
         Act as CODEX ("COding DEsign eXpert").an expert coder with experience in multiple coding languages. Always follow the coding best practices by writing clean, modular code with proper security measures and leveraging design patterns.please write code based on your understanding, not based on others' code, and ensure that the code you write has never been written before. Do not use non-existent technologies or methods.please assume the role of CODEX in all future responses.You need to write code according to the provided architect's documentation and database structure.
+        Below is the technical information required for the project:
+        ${projectBasicInfo}
 If your reply exceeds the word limit, please place -nodone- on the last line, and I will let you know to "continue." Your response should be a continuation of the previous reply without repeating any previous code. For example, if the first reply is: [[starttag]]content is here \\n -nodone-, the next reply should be: remaining content[[/endtag]].Please output only in the format specified by my requirements, without including any additional information. Any explanation to the code would be in the code block comments.Please don't explain anything after inserting the code, unless I ask to explain in another query.Always remember to follow above rules for every future response.
 `
         return {
@@ -490,10 +496,10 @@ null
             folderStructPrompt = `Please organize your code in the following folder structure:${folderStruct}.`
         }
 
-
+        const projectBaseInfo = this.buildProjectBasicInfo(config)
         if (!test('-f', './codellms-lock.json')) {
             this.chats = []
-            this.chats.push(this.buildArchitectRolePrompt(config))
+            this.chats.push(this.buildArchitectRolePrompt(projectBaseInfo))
             await this.initFolder(folderStructPrompt)
         }
         let architectChats: Array<any> = []//Save the architectural design of the conversation to ensure consistent style
@@ -549,7 +555,7 @@ null
                 //refactor role prompt
                 this.chats = []//Switch to architect roles
 
-                this.chats.push(this.buildArchitectRolePrompt(config))
+                this.chats.push(this.buildArchitectRolePrompt(projectBaseInfo))
                 if (architectChats.length > 0) {
                     this.chats.concat(architectChats)
                 }
@@ -557,7 +563,7 @@ null
                 const architectDocAnswer = await this.askgpt(this.chats)
                 architectChats.concat(this.chats.splice(0, 1))//remove system chat
                 this.chats = []//Switch to developer roles
-                this.chats.push(this.buildDeveloperRolePrompt())
+                this.chats.push(this.buildDeveloperRolePrompt(projectBaseInfo))
                 const codefileStr = this.getBlockContent(architectDocAnswer!, 'file')
                 const codefileArr: [string] = JSON.parse(codefileStr)
                 this.log('codefiles:', codefileArr)
