@@ -1,6 +1,6 @@
 {
   "name": "codellms",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Use LLMS to automatically generate a complete application project.",
   "author": "guoxing45@gmail.com",
   "bin": {
