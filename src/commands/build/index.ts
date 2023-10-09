@@ -87,29 +87,36 @@ export default class Build extends Command {
         ["file path1","file path2"...]
         [[/file]]
         [[info]]
-        // Information for each file as JSON object
-        // Key is file path, value is methods info for that file
-        // Method info includes method, parameters, result,and business_logic
-        // 
         {
-            "file path 1": [{
-                "method": "method name",
-                "parameters": ["parameter 1", "parameter 2", ...],
-                "business_logic": "business logic description",
-                "result": "What result does the method return?"
-            }
-            ...
-            ],
-            "file path 2": [{
-            "method": "method name",
-            "parameters": ["parameter 1", "parameter 2", ...],
-            "business_logic": "business logic description",
-            "result": "What result does the method return?"
-            }
-            ...
-            ],
-            ...
+  "objective": "Project objective",
+  "technologySelection": {
+    "programmingLanguage": "Programming Language",
+    "framework": "Framework",
+    "database": "Database",
+    "otherToolsAndTechnologies": "Other Tools and Technologies"
+  },
+  "featureDesign": [
+    {
+      "fileName": "Corresponds to each item of the array in the [[file]] node",
+      "methodList": [
+        {
+          "methodName": "Method Name",
+          "parameters": {
+            "parameterName": "parameterType - parameterDescription"
+          },
+          "returnValue": "returnType - returnDescription",
+          "businessLogic": "Business logic description"
         }
+      ]
+    }
+  ],
+  "securityConsiderations": [
+    "Security consideration 1",
+    "Security consideration 2",
+    "Security consideration 3"
+  ],
+  "errorHandling": "Error handling approach"
+}
         [[/info]]
         Please start professional architecture design based on the above information, and all your output will be handed over to developers for development.Make sure your answers are returned in the format required above,and maintain architectural design consistency.Let's think step by step.
         ---`
@@ -128,8 +135,8 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
             "role": "system", "content": prompt
         }
     }
-    developerToCodingPrompt(dbschema: string | undefined, fileList: string, featureDesign: Array<JSON>, currentCodingFile: string) {
-        let methods = featureDesign.map((item: any) => item['method']);
+    developerToCodingPrompt(dbschema: string | undefined, fileList: string, archDoc: any, currentCodingFile: string) {
+        let methods = archDoc?.['featureDesign']?.map((item: any) => item['methodList']);
         const dbPrompt = dbschema ? `
         Database schema:
         \`\`\`
@@ -138,7 +145,12 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
         `: ''
         const prompt = `
         Let's implement the coding of these files:${fileList},Now, write the code for ${currentCodingFile}.As a CODEX, you will think step by step to implement the code. Please provide high-quality code based on the architecture design document and the database structure document. Ensure the implementation of all methods and business logic required in the architecture design document. Ensure that the technologies and functions used in the written code actually exist.Documentation is provided below:
-        The ${currentCodingFile} comparison involves the following methods: ${methods}. Here is the corresponding information for these methods: ${featureDesign}.ou need to write your code according to the requirements of parameters, business logic, and result.
+        The ${currentCodingFile} comparison involves the following methods: ${methods}. 
+        The architectural design document of this current functional module:
+        \`\`\`
+        ${archDoc}
+        \`\`\`
+        You need to write your code according to the requirements of parameters, business logic, and result.
         ${dbPrompt}
         The response don't use \`\`\` to warp, just fill in the format as shown in the example below:
         [[file]]
@@ -201,9 +213,11 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
         }
         return matches
     }
-    async askgpt(question: Array<any>): Promise<string | undefined> {
+    // unSave: Unsave current conversation context
+    async askgpt(question: Array<any>, unSave: boolean = false): Promise<string | undefined> {
         // this.log('chatgpt request:')
         // this.log(JSON.stringify(question))
+        const reqChatIndex = question.length;
         let req: CreateChatCompletionRequest = {
             model: this.openaiConfig['model'],
             messages: question,
@@ -257,7 +271,12 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
                 }
 
                 // const assistant = 'assistant'
-                this.chats.push({ "role": 'assistant', "content": answerResult })
+                if (unSave) {
+                    this.chats = this.chats.slice(0, reqChatIndex - 1) //discard conversation
+                } else {
+                    this.chats.push({ "role": 'assistant', "content": answerResult })
+                }
+
                 // if (result?.finish_reason === 'stop' || result?.finish_reason === 'content_filter') {
                 //     this.chats.push({ "role": result?.message?.role, "content": answerResult })
                 // } else {
@@ -574,13 +593,13 @@ null
                     let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
                     for (let fIndex = 0; fIndex < codefileArr.length; fIndex++) {
                         const codefileName = codefileArr[fIndex]
-                        const designDoc = infoObj[codefileName]
+                        const designDoc = infoObj//infoObj[codefileName]
                         if (!designDoc || !codefileName) {
                             continue
                         }
                         this.chats.push(this.developerToCodingPrompt(dbschemaContent, codefileStr, designDoc, codefileName))
                         const getCodeToFileWithGpt = async () => {
-                            const answer = await this.askgpt(this.chats) as string
+                            const answer = await this.askgpt(this.chats, true) as string
                             // let fileList = this.getBlockContent(answer, 'file')
                             let code = this.getBlockContent(answer, 'codeblock')
                             // for (let i = 0; i < fileList.length; i++) {
@@ -610,8 +629,8 @@ null
         [[/codeblock]]
         .please provide clean, maintainable and accurate code with comments for each method.
         `})
-                                const codeContent = await this.askgpt(this.chats) as string
-                                //let codeBody = this.cleanCodeBlock(codeContent)
+                                // The context of the previous file is not saved, as per the architect documentation.
+                                const codeContent = await this.askgpt(this.chats, true) as string
                                 code = this.getBlockContent(codeContent, 'codeblock') as string
                             }
                             lockFeatureJson['features'][file]['children'].push(codefileName)
