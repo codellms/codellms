@@ -144,14 +144,14 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
         \`\`\`
         `: ''
         const prompt = `
-        Let's implement the coding of these files:${fileList},Now, write the code for ${currentCodingFile}.As a CODEX, you will think step by step to implement the code. Please provide high-quality code based on the architecture design document and the database structure document. Ensure the implementation of all methods and business logic required in the architecture design document. Ensure that the technologies and functions used in the written code actually exist.Documentation is provided below:
+        Write the code for ${currentCodingFile}.
         The ${currentCodingFile} comparison involves the following methods: ${methods}. 
         The architectural design document of this current functional module:
         \`\`\`
-        ${archDoc}
+        ${JSON.stringify(archDoc)}
         \`\`\`
-        You need to write your code according to the requirements of parameters, business logic, and result.
         ${dbPrompt}
+        As a CODEX, you will think step by step to write the code. Please provide high-quality code based on the architecture design document and the database structure document. Ensure that the technologies and functionalities used in the written code are real. If your method body only contains explanations without complete logical implementation, it will be considered as unfinished work.
         The response don't use \`\`\` to warp, just fill in the format as shown in the example below:
         [[file]]
         {{filepath}}
@@ -159,6 +159,7 @@ If your reply exceeds the word limit, please place -nodone- on the last line, an
         [[codeblock]]
         {{code}}
         [[/codeblock]]
+        Now, as developer role, do your job.
         `
         return {
             "role": "user", "content": prompt
@@ -587,7 +588,7 @@ null
                 const codefileArr: [string] = JSON.parse(codefileStr)
                 this.log('codefiles:', codefileArr)
                 const infoObj = JSON.parse(this.getBlockContent(architectDocAnswer!, 'info'))
-                this.log('codebodydesign:', infoObj)
+                this.log('codebodydesign:', JSON.stringify(infoObj))
                 // Code files requested by Loop Architect
                 if (codefileArr instanceof Array) {
                     let projectFiles = this.getClearFeatureFileList(lockFeatureJson)
